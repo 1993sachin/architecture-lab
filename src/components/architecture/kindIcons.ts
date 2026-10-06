@@ -1,0 +1,37 @@
+import {
+  AppWindow,
+  BarChart3,
+  Boxes,
+  Database,
+  Globe,
+  HardDrive,
+  KeyRound,
+  ListOrdered,
+  Monitor,
+  Network,
+  Puzzle,
+  Search,
+  Server,
+  Split,
+  Zap,
+  type LucideIcon,
+} from 'lucide-react'
+import type { ComponentKind } from './types'
+
+export const kindIcons: Record<ComponentKind, LucideIcon> = {
+  client: Monitor,
+  shell: AppWindow,
+  mfe: Puzzle,
+  api: Server,
+  gateway: Network,
+  service: Boxes,
+  database: Database,
+  cache: Zap,
+  queue: ListOrdered,
+  cdn: Globe,
+  storage: HardDrive,
+  search: Search,
+  analytics: BarChart3,
+  auth: KeyRound,
+  loadbalancer: Split,
+}
