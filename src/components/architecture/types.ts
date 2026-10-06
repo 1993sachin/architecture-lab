@@ -54,7 +54,24 @@ export type ArchitectureEdgeData = {
   duration?: number
   /** Curve style; 'step' draws orthogonal lines, good for bus-like layouts. */
   path?: 'bezier' | 'step'
+  /**
+   * A single request travelling this edge right now. `key` must change for
+   * every new hop so the animation restarts; `reverse` runs target → source.
+   */
+  pulse?: EdgePulse
+  /** Hide the ambient traffic dots, e.g. when traffic is driven by explicit requests. */
+  ambient?: boolean
   [key: string]: unknown
+}
+
+export type PulseKind = 'request' | 'response' | 'retry' | 'failed' | 'queued' | 'cache'
+
+export interface EdgePulse {
+  key: string
+  kind: PulseKind
+  reverse?: boolean
+  /** Seconds the hop takes on screen. */
+  duration: number
 }
 
 export type ArchitectureNodeType = Node<ArchitectureNodeData, 'architecture'>
