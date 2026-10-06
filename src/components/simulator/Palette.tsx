@@ -1,7 +1,7 @@
 import { ChevronRight, GripVertical } from 'lucide-react'
 import { CATEGORIES, CATEGORY_LABELS, COMPONENTS, type ComponentType } from '@/lib/architecture'
 import { kindIcons } from '@/components/architecture/kindIcons'
-import { DRAG_MIME, KIND_OF } from './palette'
+import { DRAG_MIME, KIND_OF } from './componentKinds'
 
 /**
  * Components grouped by category. Drag one onto the canvas, or press it to
