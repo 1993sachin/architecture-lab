@@ -131,7 +131,7 @@ export function compareEvaluations(
       const change = (a.get(r)?.delta ?? 0) - (b.get(r)?.delta ?? 0)
       if (change * direction <= 0.05) continue
       // A factor that disappeared explains the move by its absence.
-      const text = a.get(r) ? a.get(r)!.text : `no longer: ${b.get(r)!.text.charAt(0).toLowerCase()}${b.get(r)!.text.slice(1)}`
+      const text = a.get(r) ? a.get(r)!.text : `${b.get(r)!.text.replace(/\.$/, '')} (resolved).`
       if (!best || Math.abs(change) > Math.abs(best.change)) best = { change, text }
     }
     return best?.text

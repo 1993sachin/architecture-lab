@@ -652,7 +652,7 @@ function ruleCompute(ctx: Context) {
       'scalability',
       'single-instance',
       -Math.min(2.5, 1.2 * coreSingles.length),
-      `${names(coreSingles)} run as a single instance.`,
+      `${names(coreSingles)} ${coreSingles.length === 1 ? 'runs' : 'run'} as a single instance.`,
     )
     for (const s of coreSingles) {
       ctx.bottleneck(

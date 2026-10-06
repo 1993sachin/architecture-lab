@@ -33,10 +33,10 @@ export const experiments: ExperimentMeta[] = [
     title: 'Architecture Decision Simulator',
     path: '/simulator',
     summary:
-      'Pick a system-design challenge, drag components onto a canvas and wire them up. Get scored on scalability, reliability, cost and more.',
+      'Design systems and explore architectural trade-offs. Build a design for a real challenge and see how it holds up across six dimensions.',
     tryThis: 'Design a video streaming platform',
     concepts: ['System design', 'Trade-offs', 'Scalability', 'Cost'],
     icon: Workflow,
-    status: 'coming-soon',
+    status: 'available',
   },
 ]

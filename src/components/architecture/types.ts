@@ -17,6 +17,17 @@ export type ComponentKind =
   | 'analytics'
   | 'auth'
   | 'loadbalancer'
+  | 'webapp'
+  | 'worker'
+  | 'function'
+  | 'nosql'
+  | 'eventBus'
+  | 'stream'
+  | 'dns'
+  | 'rateLimiter'
+  | 'logging'
+  | 'metrics'
+  | 'tracing'
 
 export interface NodeAction {
   label: string
@@ -36,6 +47,8 @@ export type ArchitectureNodeData = {
   action?: NodeAction
   /** Status text to show instead of the default label, e.g. "Taken down". */
   statusLabel?: string
+  /** Design mode: show connection handles so the visitor can draw edges. */
+  editable?: boolean
   [key: string]: unknown
 }
 
