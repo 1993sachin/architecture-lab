@@ -8,6 +8,9 @@ import type { ArchitectureNodeType } from './types'
 
 // Invisible connection points: diagrams are read-only, edges just need anchors.
 const handleClass = '!size-1.5 !min-h-0 !min-w-0 !border-0 !bg-transparent'
+// Design mode: visible, grabbable dots on every side.
+const editHandleClass =
+  '!size-2.5 !min-h-0 !min-w-0 !border !border-border-strong !bg-surface transition-colors hover:!border-accent hover:!bg-accent'
 
 const statusFrame = {
   healthy: 'border-border-strong',
@@ -23,24 +26,27 @@ const statusFrame = {
  * A service, module or infrastructure component. Status is shown by border,
  * a status dot, an icon and a text label, so it never relies on color alone.
  */
-export const ArchitectureNode = memo(function ArchitectureNode({ data }: NodeProps<ArchitectureNodeType>) {
+export const ArchitectureNode = memo(function ArchitectureNode({ data, selected }: NodeProps<ArchitectureNodeType>) {
   const Icon = kindIcons[data.kind]
   const meta = statusMeta[data.status]
   const StatusIcon = meta.icon
   const dimmed = data.status === 'offline'
+  const editable = !!data.editable
+  const hc = editable ? editHandleClass : handleClass
 
   return (
     <div
       className={cn(
         'w-[200px] rounded-lg border bg-surface text-left shadow-sm transition-[border-color,background-color,box-shadow] duration-300',
         statusFrame[data.status],
+        selected && 'ring-2 ring-accent/70 ring-offset-2 ring-offset-bg',
       )}
     >
-      <Handle id="top" type="target" position={Position.Top} className={handleClass} isConnectable={false} />
-      <Handle id="left-in" type="target" position={Position.Left} className={handleClass} isConnectable={false} />
-      <Handle id="left-out" type="source" position={Position.Left} className={handleClass} isConnectable={false} />
-      <Handle id="right" type="source" position={Position.Right} className={handleClass} isConnectable={false} />
-      <Handle id="right-in" type="target" position={Position.Right} className={handleClass} isConnectable={false} />
+      <Handle id="top" type="target" position={Position.Top} className={hc} isConnectable={editable} />
+      <Handle id="left-in" type="target" position={Position.Left} className={hc} isConnectable={editable} />
+      <Handle id="left-out" type="source" position={Position.Left} className={hc} isConnectable={editable} />
+      <Handle id="right" type="source" position={Position.Right} className={hc} isConnectable={editable} />
+      <Handle id="right-in" type="target" position={Position.Right} className={hc} isConnectable={editable} />
       <div className={cn('flex items-center gap-2 px-3 pt-2.5', dimmed && 'opacity-60')}>
         <span className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-border bg-surface-2 text-fg-muted">
           <Icon className="size-3.5" aria-hidden="true" />
@@ -72,7 +78,10 @@ export const ArchitectureNode = memo(function ArchitectureNode({ data }: NodePro
         <div className="mt-2 flex items-center justify-between gap-2 border-t border-border px-3 py-1.5">
           <div className="flex min-w-0 flex-wrap gap-1">
             {data.badges?.map((b) => (
-              <span key={b} className="rounded border border-border bg-surface-2 px-1 py-px font-mono text-[9.5px] text-fg-subtle">
+              <span
+                key={b}
+                className="rounded border border-border bg-surface-2 px-1 py-px font-mono text-[9.5px] text-fg-subtle"
+              >
                 {b}
               </span>
             ))}
@@ -93,14 +102,18 @@ export const ArchitectureNode = memo(function ArchitectureNode({ data }: NodePro
                   : 'text-fg-subtle hover:bg-failed/10 hover:text-failed',
               )}
             >
-              {data.action.pressed ? <Power className="size-3" aria-hidden="true" /> : <PowerOff className="size-3" aria-hidden="true" />}
+              {data.action.pressed ? (
+                <Power className="size-3" aria-hidden="true" />
+              ) : (
+                <PowerOff className="size-3" aria-hidden="true" />
+              )}
               {data.action.label}
             </button>
           )}
         </div>
       )}
       {!(data.badges?.length || data.action) && <div className="h-2.5" />}
-      <Handle id="bottom" type="source" position={Position.Bottom} className={handleClass} isConnectable={false} />
+      <Handle id="bottom" type="source" position={Position.Bottom} className={hc} isConnectable={editable} />
     </div>
   )
 })

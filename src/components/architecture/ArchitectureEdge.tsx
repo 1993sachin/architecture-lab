@@ -35,7 +35,7 @@ const pulseColor: Record<PulseKind, string> = {
  * line with a break marker. A `pulse` draws one request travelling the edge.
  */
 export const ArchitectureEdge = memo(function ArchitectureEdge(props: EdgeProps<ArchitectureEdgeType>) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data } = props
+  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, markerEnd, selected } = props
   const reducedMotion = usePrefersReducedMotion()
   const geometry = { sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition }
   const [path, labelX, labelY] =
@@ -51,9 +51,11 @@ export const ArchitectureEdge = memo(function ArchitectureEdge(props: EdgeProps<
       <BaseEdge
         id={id}
         path={path}
+        markerEnd={markerEnd}
+        interactionWidth={16}
         style={{
-          stroke: pulse ? pulseColor[pulse.kind] : stroke[flow],
-          strokeWidth: pulse ? 2.25 : flow === 'idle' ? 1.25 : 1.75,
+          stroke: pulse ? pulseColor[pulse.kind] : selected ? 'var(--accent)' : stroke[flow],
+          strokeWidth: pulse || selected ? 2.25 : flow === 'idle' ? 1.25 : 1.75,
           strokeDasharray: dash[flow],
           transition: 'stroke 200ms, stroke-width 200ms',
         }}
