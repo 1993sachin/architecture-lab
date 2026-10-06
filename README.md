@@ -12,6 +12,8 @@ React · TypeScript · Vite · React Router · Tailwind CSS · React Flow · Zus
 
 ## Local development
 
+Requires Node.js 22.12+ or 24+ (Node 24 LTS recommended; `.nvmrc` pins it, so `nvm use` picks it up). Node 23 and 25 are not supported by Vitest.
+
 ```bash
 npm install
 npm run dev        # start the dev server
