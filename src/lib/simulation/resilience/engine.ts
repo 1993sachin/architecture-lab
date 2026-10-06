@@ -108,7 +108,10 @@ const label = (id: NodeId) => SERVICE_LABELS[id]
 const isKilled = (config: ResilienceConfig, id: KillableService) => config.killed.includes(id)
 
 function pushEvent(state: ResilienceState, text: string, tone: EventTone, requestId?: number) {
-  state.timeline = [{ id: state.nextEventId++, t: state.clock, requestId, text, tone }, ...state.timeline].slice(0, TIMELINE_LIMIT)
+  state.timeline = [{ id: state.nextEventId++, t: state.clock, requestId, text, tone }, ...state.timeline].slice(
+    0,
+    TIMELINE_LIMIT,
+  )
 }
 
 /** Clears the timeline without touching metrics or service state. */
@@ -131,7 +134,8 @@ export function applyConfigChange(state: ResilienceState, prev: ResilienceConfig
       pushEvent(s, `${label(id)} restored, warming up`, 'info')
     }
   }
-  if (prev.latencyMs !== next.latencyMs) pushEvent(s, `Network latency set to +${next.latencyMs} ms`, next.latencyMs ? 'warning' : 'neutral')
+  if (prev.latencyMs !== next.latencyMs)
+    pushEvent(s, `Network latency set to +${next.latencyMs} ms`, next.latencyMs ? 'warning' : 'neutral')
   if (prev.packetLoss !== next.packetLoss)
     pushEvent(s, `Packet loss set to ${Math.round(next.packetLoss * 100)}%`, next.packetLoss ? 'warning' : 'neutral')
   for (const dep of DEPENDENCIES) {
@@ -149,7 +153,8 @@ export function applyConfigChange(state: ResilienceState, prev: ResilienceConfig
     if (prev[key] !== next[key]) pushEvent(s, `${name} ${next[key] ? 'enabled' : 'disabled'}`, 'info')
   }
   if (prev.maxRetries !== next.maxRetries) pushEvent(s, `Max retries set to ${next.maxRetries}`, 'neutral')
-  if (prev.failureThreshold !== next.failureThreshold) pushEvent(s, `Failure threshold set to ${next.failureThreshold}`, 'neutral')
+  if (prev.failureThreshold !== next.failureThreshold)
+    pushEvent(s, `Failure threshold set to ${next.failureThreshold}`, 'neutral')
   if (prev.recoveryMs !== next.recoveryMs) pushEvent(s, `Recovery time set to ${next.recoveryMs / 1000} s`, 'neutral')
   // Turning the breaker off forgets its state; turning it on starts closed.
   if (prev.circuitBreakerEnabled !== next.circuitBreakerEnabled) {
@@ -176,12 +181,16 @@ function processQueue(state: ResilienceState, config: ResilienceConfig) {
   }
   let started = 0
   for (const msg of state.queue) {
-    if (started >= QUEUE_THROUGHPUT) break
-    // Consumers back off while a dependency they need is down.
-    if (msg.status === 'queued' && (!blocker || msg.waitingOn === undefined)) {
-      msg.status = 'processing'
-      started++
+    if (msg.status !== 'queued') continue
+    // Consumers back off while a dependency they need is down; the message waits.
+    if (blocker) {
+      msg.waitingOn = blocker
+      continue
     }
+    if (started >= QUEUE_THROUGHPUT) break
+    msg.status = 'processing'
+    msg.waitingOn = undefined
+    started++
   }
   // Keep pending work, plus the most recent completed messages for display.
   const pending = state.queue.filter((m) => m.status !== 'completed')
@@ -213,7 +222,12 @@ interface AttemptResult {
 /** One network call from the Order Service to a dependency. */
 function attempt(dep: DependencyId, config: ResilienceConfig, state: ResilienceState, rng: Rng): AttemptResult {
   if (isKilled(config, dep)) {
-    return { ok: false, kind: 'failed', latency: LATENCY.connectionRefused, label: `${label(dep)} unavailable (connection refused)` }
+    return {
+      ok: false,
+      kind: 'failed',
+      latency: LATENCY.connectionRefused,
+      label: `${label(dep)} unavailable (connection refused)`,
+    }
   }
   // Dropped packets: the caller hears nothing back and waits for the timeout.
   if (config.packetLoss > 0 && rng.chance(config.packetLoss)) {
@@ -225,7 +239,13 @@ function attempt(dep: DependencyId, config: ResilienceConfig, state: ResilienceS
 
   if (dep === 'payment' && isKilled(config, 'paymentDb')) {
     const waited = Math.min(latency + LATENCY.databaseTimeout, config.timeoutMs)
-    return { ok: false, kind: 'failed', latency: waited, label: 'Payment Database unavailable: Payment Service returned 500', failedAt: 'paymentDb' }
+    return {
+      ok: false,
+      kind: 'failed',
+      latency: waited,
+      label: 'Payment Database unavailable: Payment Service returned 500',
+      failedAt: 'paymentDb',
+    }
   }
   latency += LATENCY.database
   if (latency > config.timeoutMs) {
@@ -257,7 +277,13 @@ function callDependency(
 
   if (config.circuitBreakerEnabled && breaker.state === 'open') {
     trace.latency += LATENCY.circuitRejection
-    trace.steps.push({ from: 'order', to: dep, kind: 'circuit-open', badge: 'CIRCUIT OPEN', label: `Circuit open: call to ${label(dep)} rejected` })
+    trace.steps.push({
+      from: 'order',
+      to: dep,
+      kind: 'circuit-open',
+      badge: 'CIRCUIT OPEN',
+      label: `Circuit open: call to ${label(dep)} rejected`,
+    })
     pushEvent(state, `Circuit OPEN: ${label(dep)} call failed fast`, 'warning', rid)
     state.metrics.circuitRejections++
     return { ok: false, status: 'circuit-open', failedAt: dep }
@@ -272,7 +298,13 @@ function callDependency(
       trace.retries++
       state.metrics.retryCount++
       trace.latency += LATENCY.backoff * (n - 1)
-      trace.steps.push({ from: 'order', to: dep, kind: 'retry', badge: 'RETRYING', label: `Retry attempt #${n - 1} to ${label(dep)}` })
+      trace.steps.push({
+        from: 'order',
+        to: dep,
+        kind: 'retry',
+        badge: 'RETRYING',
+        label: `Retry attempt #${n - 1} to ${label(dep)}`,
+      })
       pushEvent(state, `Retry attempt #${n - 1} → ${label(dep)}`, 'warning', rid)
     } else {
       trace.steps.push({ from: 'order', to: dep, kind: 'request', badge: 'IN FLIGHT', label: `Order Service → ${label(dep)}` })
@@ -359,7 +391,13 @@ export function sendRequest(prev: ResilienceState, config: ResilienceConfig): Re
       ['gateway', 'client'],
     ]
     for (const [from, to] of back) {
-      trace.steps.push({ from, to, kind: ok ? 'response' : 'failed', badge: BADGE[status], label: ok ? `${label(from)} → ${label(to)}` : `Error returned to ${label(to)}` })
+      trace.steps.push({
+        from,
+        to,
+        kind: ok ? 'response' : 'failed',
+        badge: BADGE[status],
+        label: ok ? `${label(from)} → ${label(to)}` : `Error returned to ${label(to)}`,
+      })
     }
     trace.latency += LATENCY.edgeHop * 2
     if (ok) state.metrics.successfulRequests++
@@ -416,7 +454,13 @@ export function sendRequest(prev: ResilienceState, config: ResilienceConfig): Re
       stockKnown = true
       trace.cache = 'hit'
       state.metrics.cacheHits++
-      trace.steps.push({ from: 'order', to: 'cache', kind: 'cache-hit', badge: 'IN FLIGHT', label: `Cache HIT: stock for ${sku}` })
+      trace.steps.push({
+        from: 'order',
+        to: 'cache',
+        kind: 'cache-hit',
+        badge: 'IN FLIGHT',
+        label: `Cache HIT: stock for ${sku}`,
+      })
       trace.steps.push({ from: 'cache', to: 'order', kind: 'response', badge: 'IN FLIGHT', label: 'Stock read from Redis' })
       pushEvent(state, `Cache HIT ${sku}: Inventory Service not called`, 'info', requestId)
     } else {

@@ -52,7 +52,9 @@ function systemNotes(config: ResilienceConfig, state: ResilienceState): string[]
     notes.push('Order Service is down, so the API Gateway has nothing to route orders to. No mechanism behind it can help.')
   }
   if (killed.includes('paymentDb')) {
-    notes.push('Payment Database is down. Payment Service is running but every charge fails, so the failure cascades up to the client.')
+    notes.push(
+      'Payment Database is down. Payment Service is running but every charge fails, so the failure cascades up to the client.',
+    )
   }
   for (const dep of DEPENDENCIES) {
     if (killed.includes(dep)) notes.push(`${label(dep)} is unavailable. Orders that need it cannot complete synchronously.`)
@@ -60,7 +62,10 @@ function systemNotes(config: ResilienceConfig, state: ResilienceState): string[]
     if (slow) notes.push(`${label(dep)} needs ${slow} ms extra, so calls run past the ${config.timeoutMs} ms timeout.`)
   }
   if (config.latencyMs) notes.push(`Every hop pays +${config.latencyMs} ms of network latency.`)
-  if (config.packetLoss) notes.push(`${Math.round(config.packetLoss * 100)}% of calls are dropped and only fail after the ${config.timeoutMs} ms timeout.`)
+  if (config.packetLoss)
+    notes.push(
+      `${Math.round(config.packetLoss * 100)}% of calls are dropped and only fail after the ${config.timeoutMs} ms timeout.`,
+    )
   if (config.queueEnabled) {
     const { queued, processing } = summarizeMetrics(state).queue
     if (queued + processing > 0) notes.push(`${queued + processing} orders are waiting in the queue for asynchronous fulfilment.`)
@@ -98,12 +103,18 @@ function explainRequest(trace: RequestTrace, config: ResilienceConfig, state: Re
     case 'success': {
       const details: string[] = []
       if (trace.retries) {
-        details.push(`Retries masked a transient failure, but they added latency and ${trace.retries} extra ${trace.retries === 1 ? 'call' : 'calls'} downstream.`)
+        details.push(
+          `Retries masked a transient failure, but they added latency and ${trace.retries} extra ${trace.retries === 1 ? 'call' : 'calls'} downstream.`,
+        )
       }
       if (trace.cache === 'hit') {
-        details.push('Cache hits are reducing requests to the downstream service and lowering simulated latency. Inventory Service was not called.')
+        details.push(
+          'Cache hits are reducing requests to the downstream service and lowering simulated latency. Inventory Service was not called.',
+        )
       } else if (trace.cache === 'miss') {
-        details.push(`Cache MISS: stock for ${trace.sku} was fetched from Inventory and stored, so the next request for it will be a hit.`)
+        details.push(
+          `Cache MISS: stock for ${trace.sku} was fetched from Inventory and stored, so the next request for it will be a hit.`,
+        )
       }
       return {
         tone: notes.length ? 'warning' : 'healthy',
@@ -146,12 +157,15 @@ function explainRequest(trace: RequestTrace, config: ResilienceConfig, state: Re
       if (where === 'payment') headline = 'Payment Service is unavailable. Requests requiring payment are now failing.'
       if (where === 'inventory') headline = 'Inventory Service is unavailable. Orders cannot check stock, so they are failing.'
       if (where === 'order') headline = 'Order Service is down. The API Gateway returns 503 for every order.'
-      if (where === 'paymentDb') headline = 'Payment Database is down, and the failure cascaded through Payment Service to the client.'
+      if (where === 'paymentDb')
+        headline = 'Payment Database is down, and the failure cascaded through Payment Service to the client.'
       return {
         tone: 'failed',
         headline,
         details: [
-          ...(trace.retries ? [`${trace.retries} retries could not help: the outage is not transient, and each retry added load and latency.`] : []),
+          ...(trace.retries
+            ? [`${trace.retries} retries could not help: the outage is not transient, and each retry added load and latency.`]
+            : []),
           ...notes,
         ].slice(0, 3),
       }
@@ -170,9 +184,7 @@ export function explain(config: ResilienceConfig, state: ResilienceState, action
     return {
       tone: 'healthy',
       headline: 'All services are healthy. Send a request to watch it travel through the system.',
-      details: [
-        'Then break something in Failure Injection, and turn on Resilience Mechanisms to see what they change.',
-      ],
+      details: ['Then break something in Failure Injection, and turn on Resilience Mechanisms to see what they change.'],
     }
   }
 
@@ -194,7 +206,8 @@ export function explain(config: ResilienceConfig, state: ResilienceState, action
         if (!config.circuitBreakerEnabled) hints.push('Enable the circuit breaker to stop waiting on it.')
         if (!config.queueEnabled) hints.push('Enable the message queue to keep accepting orders while it is down.')
       }
-      if (s === 'inventory' && !config.cacheEnabled) hints.push('Enable the cache: products already in Redis can still be ordered.')
+      if (s === 'inventory' && !config.cacheEnabled)
+        hints.push('Enable the cache: products already in Redis can still be ordered.')
       return {
         tone: 'failed',
         headline,
@@ -210,14 +223,18 @@ export function explain(config: ResilienceConfig, state: ResilienceState, action
             : `${label(action.service)} is restored and warming up.`,
         details: [
           'A restarted service is slower for a few seconds while caches and connection pools fill. It shows as Recovering.',
-          ...(config.circuitBreakerEnabled ? ['An open circuit stays open until its recovery time passes and a trial request succeeds.'] : []),
+          ...(config.circuitBreakerEnabled
+            ? ['An open circuit stays open until its recovery time passes and a trial request succeeds.']
+            : []),
           ...(config.queueEnabled ? ['Queued orders resume processing as more requests arrive.'] : []),
         ],
       }
     case 'latency':
       return {
         tone: config.latencyMs ? 'warning' : 'healthy',
-        headline: config.latencyMs ? `Every network hop is now ${config.latencyMs} ms slower.` : 'Network latency is back to normal.',
+        headline: config.latencyMs
+          ? `Every network hop is now ${config.latencyMs} ms slower.`
+          : 'Network latency is back to normal.',
         details: config.latencyMs
           ? [
               'Latency adds up across hops: one order makes several calls, so the client sees several times the delay.',
@@ -235,7 +252,9 @@ export function explain(config: ResilienceConfig, state: ResilienceState, action
         details: config.packetLoss
           ? [
               'A dropped call is a transient failure: trying again usually works.',
-              config.retryEnabled ? 'Retry is on, so most drops are masked at the cost of latency.' : 'Enable retry to mask most of these failures.',
+              config.retryEnabled
+                ? 'Retry is on, so most drops are masked at the cost of latency.'
+                : 'Enable retry to mask most of these failures.',
               'Drops are seeded, so the same sequence of requests always drops the same calls.',
             ]
           : notes.slice(0, 2),
@@ -266,8 +285,10 @@ export function explain(config: ResilienceConfig, state: ResilienceState, action
       const detail = {
         retry: `Each failed call is retried up to ${config.maxRetries} ${config.maxRetries === 1 ? 'time' : 'times'}, with a short backoff before each attempt.`,
         circuitBreaker: `While OPEN, calls fail fast. After ${config.recoveryMs / 1000} s it goes HALF OPEN and one trial request decides whether it closes.`,
-        cache: 'Stock levels are cached per product. The first request for a product is a MISS; repeats within a few seconds are HITs and skip Inventory.',
-        queue: 'Message Queue consumers process inventory and payment in the background. Watch messages move from Queued to Processing to Completed.',
+        cache:
+          'Stock levels are cached per product. The first request for a product is a MISS; repeats within a few seconds are HITs and skip Inventory.',
+        queue:
+          'Message Queue consumers process inventory and payment in the background. Watch messages move from Queued to Processing to Completed.',
       }[mechanism]
       return { tone: 'healthy', headline, details: [detail, ...notes].slice(0, 3), tradeoff: MECHANISM_TRADEOFFS[mechanism] }
     }

@@ -321,7 +321,9 @@ describe('scenarios', () => {
 
 describe('url state', () => {
   it('parses a shared link', () => {
-    const { scenarioId, config } = parseResilienceParams(new URLSearchParams('scenario=payment-outage&retry=true&circuitBreaker=true'))
+    const { scenarioId, config } = parseResilienceParams(
+      new URLSearchParams('scenario=payment-outage&retry=true&circuitBreaker=true'),
+    )
     expect(scenarioId).toBe('payment-outage')
     expect(config.killed).toEqual(['payment'])
     expect(config.retryEnabled).toBe(true)
@@ -337,7 +339,10 @@ describe('url state', () => {
 
   it('round-trips and omits defaults', () => {
     expect(serializeResilienceParams({ scenarioId: null, config: DEFAULT_CONFIG }).toString()).toBe('')
-    const state = { scenarioId: 'database-failure' as const, config: { ...scenarioConfig(getScenario('database-failure')!), cacheEnabled: true } }
+    const state = {
+      scenarioId: 'database-failure' as const,
+      config: { ...scenarioConfig(getScenario('database-failure')!), cacheEnabled: true },
+    }
     const params = serializeResilienceParams(state)
     expect(params.toString()).toBe('scenario=database-failure&cache=true')
     expect(parseResilienceParams(params)).toEqual(state)

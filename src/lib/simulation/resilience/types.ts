@@ -60,7 +60,16 @@ export type RequestStatus = 'success' | 'accepted' | 'failed' | 'timeout' | 'cir
 /** Status shown for a request while (and after) it travels the diagram. */
 export type RequestBadge = 'IN FLIGHT' | 'RETRYING' | 'SUCCESS' | 'ACCEPTED' | 'FAILED' | 'TIMEOUT' | 'CIRCUIT OPEN'
 
-export type StepKind = 'request' | 'response' | 'retry' | 'failed' | 'timeout' | 'circuit-open' | 'cache-hit' | 'cache-miss' | 'enqueue'
+export type StepKind =
+  | 'request'
+  | 'response'
+  | 'retry'
+  | 'failed'
+  | 'timeout'
+  | 'circuit-open'
+  | 'cache-hit'
+  | 'cache-miss'
+  | 'enqueue'
 
 /** One hop of a request along an edge, in order. */
 export interface TraceStep {
