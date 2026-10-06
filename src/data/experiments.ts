@@ -22,11 +22,11 @@ export const experiments: ExperimentMeta[] = [
     title: 'Resilience Playground',
     path: '/experiments/resilience',
     summary:
-      'Kill services, inject latency and drop requests in an order pipeline. Then add retries, a circuit breaker, a cache or a queue and measure the difference.',
+      'Break distributed systems and experiment with resilience patterns. Kill services, add latency, then compare retries, circuit breakers, caching and queues.',
     tryThis: 'Kill Payment Service, then enable a circuit breaker',
     concepts: ['Retries', 'Circuit breaker', 'Caching', 'Async processing'],
     icon: ShieldAlert,
-    status: 'coming-soon',
+    status: 'available',
   },
   {
     id: 'simulator',

@@ -15,6 +15,8 @@ const statusFrame = {
   degraded: 'border-degraded/60',
   failed: 'border-failed/70 bg-failed/[0.06] shadow-[0_0_0_3px_color-mix(in_oklab,var(--failed)_15%,transparent)]',
   offline: 'border-dashed border-border-strong bg-surface-2/60',
+  recovering: 'border-info/60',
+  'circuit-open': 'border-warning/70 border-dashed bg-warning/[0.05]',
 } as const
 
 /**
@@ -38,6 +40,7 @@ export const ArchitectureNode = memo(function ArchitectureNode({ data }: NodePro
       <Handle id="left-in" type="target" position={Position.Left} className={handleClass} isConnectable={false} />
       <Handle id="left-out" type="source" position={Position.Left} className={handleClass} isConnectable={false} />
       <Handle id="right" type="source" position={Position.Right} className={handleClass} isConnectable={false} />
+      <Handle id="right-in" type="target" position={Position.Right} className={handleClass} isConnectable={false} />
       <div className={cn('flex items-center gap-2 px-3 pt-2.5', dimmed && 'opacity-60')}>
         <span className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-border bg-surface-2 text-fg-muted">
           <Icon className="size-3.5" aria-hidden="true" />

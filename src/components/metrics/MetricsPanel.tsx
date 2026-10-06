@@ -29,11 +29,23 @@ const toneStroke: Record<MetricTone, string> = {
 }
 
 /** Row of live stat tiles, each with an optional trend line. */
-export const MetricsPanel = memo(function MetricsPanel({ metrics, className }: { metrics: Metric[]; className?: string }) {
+const columnClass = { 4: 'lg:grid-cols-4', 5: 'lg:grid-cols-5' } as const
+
+export const MetricsPanel = memo(function MetricsPanel({
+  metrics,
+  className,
+  columns = 5,
+}: {
+  metrics: Metric[]
+  className?: string
+  /** Tiles per row on large screens. */
+  columns?: keyof typeof columnClass
+}) {
   return (
     <dl
       className={cn(
-        'grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 lg:grid-cols-5 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1',
+        'grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-3 [&>*:last-child:nth-child(odd)]:col-span-2 sm:[&>*:last-child:nth-child(odd)]:col-span-1',
+        columnClass[columns],
         className,
       )}
     >
@@ -43,7 +55,9 @@ export const MetricsPanel = memo(function MetricsPanel({ metrics, className }: {
           <div key={m.label} className="flex flex-col bg-surface px-3.5 pt-3 pb-2">
             <dt className="text-[11.5px] text-fg-subtle">{m.label}</dt>
             <dd className="mt-1 flex items-baseline gap-1">
-              <span className={cn('font-mono text-xl font-medium tracking-tight tabular-nums transition-colors', toneText[tone])}>{m.value}</span>
+              <span className={cn('font-mono text-xl font-medium tracking-tight tabular-nums transition-colors', toneText[tone])}>
+                {m.value}
+              </span>
               {m.unit && <span className="font-mono text-xs text-fg-subtle">{m.unit}</span>}
             </dd>
             <dd className="mt-0.5 h-4 truncate font-mono text-[10.5px] text-fg-subtle">{m.hint}</dd>
