@@ -14,7 +14,7 @@ import { kindIcons } from '@/components/architecture/kindIcons'
 import { Button } from '@/components/ui/Button'
 import { SegmentedControl } from '@/components/ui/SegmentedControl'
 import { Switch } from '@/components/ui/Switch'
-import { KIND_OF } from './palette'
+import { KIND_OF } from './componentKinds'
 
 interface ConfigPanelProps {
   challenge: Challenge

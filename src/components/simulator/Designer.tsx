@@ -43,7 +43,7 @@ import { ConfigPanel } from './ConfigPanel'
 import { EvaluationResults } from './EvaluationResults'
 import { IssuesPanel } from './IssuesPanel'
 import { Palette } from './Palette'
-import { DRAG_MIME, KIND_OF } from './palette'
+import { DRAG_MIME, KIND_OF } from './componentKinds'
 import { copyText, downloadBlob, renderResultCard, shareUrl } from './share'
 
 type Tab = 'requirements' | 'configure' | 'issues'
