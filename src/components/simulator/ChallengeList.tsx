@@ -1,13 +1,8 @@
 import { ArrowRight, Check, Gauge } from 'lucide-react'
-import { CHALLENGES, type Challenge, type Difficulty } from '@/lib/architecture'
+import { CHALLENGES, type Challenge } from '@/lib/architecture'
 import { useSimulatorStore } from '@/store/simulatorStore'
-import { Badge, type BadgeTone } from '@/components/ui/Badge'
-
-export const DIFFICULTY_TONE: Record<Difficulty, BadgeTone> = {
-  Beginner: 'healthy',
-  Intermediate: 'degraded',
-  Advanced: 'failed',
-}
+import { Badge } from '@/components/ui/Badge'
+import { DIFFICULTY_TONE } from '@/components/ui/DifficultyBadge'
 
 /** Landing state of the simulator: pick a system-design problem. */
 export function ChallengeList({ onOpen }: { onOpen: (challenge: Challenge) => void }) {

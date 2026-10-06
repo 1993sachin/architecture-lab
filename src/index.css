@@ -184,3 +184,16 @@
   outline-offset: 2px;
   border-radius: 8px;
 }
+
+/* Guided Mode: the real control a step is about. Dashed, so it reads without colour too. */
+[data-guide-highlight] {
+  outline: 2px dashed var(--accent);
+  outline-offset: 3px;
+  border-radius: 8px;
+  animation: guide-breathe 1.8s ease-in-out infinite;
+}
+@keyframes guide-breathe {
+  50% {
+    outline-offset: 5px;
+  }
+}

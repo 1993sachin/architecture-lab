@@ -51,7 +51,7 @@ export function buildDiagram(
 ): { nodes: AnyArchitectureNode[]; edges: ArchitectureEdgeType[] } {
   const layout = LAYOUTS[layoutName]
   const isMfe = config.mode === 'microfrontends'
-  const failing = config.failure === 'none' ? null : config.failure
+  const failing = config.failures.length ? config.failures[0] : null
   const nodes: AnyArchitectureNode[] = []
   const edges: ArchitectureEdgeType[] = []
   // Dots move slower as latency rises, so a slow system looks slow.
@@ -86,23 +86,23 @@ export function buildDiagram(
       status: topology.shell,
       subtitle: isMfe ? 'host · composes MFEs at runtime' : 'routes to in-bundle modules',
       statusLabel: failing && !isMfe ? 'Crashed' : failing && !config.lazyLoading && isMfe ? 'Slow start' : undefined,
-      badges: isMfe ? ['host', config.lazyLoading ? 'lazy' : 'eager'] : ['router', config.lazyLoading ? 'code-split' : 'single chunk'],
+      badges: isMfe
+        ? ['host', config.lazyLoading ? 'lazy' : 'eager']
+        : ['router', config.lazyLoading ? 'code-split' : 'single chunk'],
       stats: [{ label: 'Requests per second', value: `${metrics.requestsPerSecond.toFixed(0)}/s` }],
     },
   })
 
   for (const id of MODULES) {
     const status = topology.modules[id]
-    const isDown = failing === id
+    const isDown = config.failures.includes(id)
     const action: NodeAction = {
       label: isDown ? 'Restore' : 'Kill',
       ariaLabel: isDown ? `Restore ${MODULE_LABELS[id]}` : `Take ${MODULE_LABELS[id]} offline`,
       pressed: isDown,
       onClick: () => onToggleModule(id),
     }
-    const badges = isMfe
-      ? [config.independentDeployment ? `v${VERSIONS[id]}` : 'release-train v12']
-      : ['module']
+    const badges = isMfe ? [config.independentDeployment ? `v${VERSIONS[id]}` : 'release-train v12'] : ['module']
     if (config.caching) badges.push('cache')
 
     nodes.push({

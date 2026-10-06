@@ -26,7 +26,9 @@ export const MfeUserView = memo(function MfeUserView({ config, metrics, topology
             <span className="size-1.5 rounded-full bg-border-strong" />
             <span className="size-1.5 rounded-full bg-border-strong" />
           </span>
-          <span className="flex-1 truncate rounded bg-surface px-2 py-0.5 font-mono text-[9.5px] text-fg-subtle">app.example.com/dashboard</span>
+          <span className="flex-1 truncate rounded bg-surface px-2 py-0.5 font-mono text-[9.5px] text-fg-subtle">
+            app.example.com/dashboard
+          </span>
         </div>
 
         {pageDown ? (
@@ -44,7 +46,13 @@ export const MfeUserView = memo(function MfeUserView({ config, metrics, topology
             <div className="relative flex items-center gap-3 border-b border-border px-3 py-2">
               <span className="size-3 rounded-sm bg-accent/70" />
               {(['workspace', 'content', 'analytics'] as ModuleId[]).map((id) => (
-                <span key={id} className={cn('h-1.5 rounded-full', topology.modules[id] === 'failed' ? 'w-10 bg-failed/40' : 'w-10 bg-border-strong')} />
+                <span
+                  key={id}
+                  className={cn(
+                    'h-1.5 rounded-full',
+                    topology.modules[id] === 'failed' ? 'w-10 bg-failed/40' : 'w-10 bg-border-strong',
+                  )}
+                />
               ))}
               {slowStart && (
                 <span className="ml-auto inline-flex items-center gap-1 font-mono text-[9.5px] text-warning">
@@ -64,8 +72,10 @@ export const MfeUserView = memo(function MfeUserView({ config, metrics, topology
       <p className="mt-2 text-[11.5px] text-fg-subtle">
         {pageDown
           ? 'A single failure blanks the entire page.'
-          : config.failure !== 'none'
-            ? 'The broken module shows a fallback. Everything else stays usable.'
+          : config.failures.length
+            ? config.failures.length > 1
+              ? 'Each broken module shows its own fallback. Everything else stays usable.'
+              : 'The broken module shows a fallback. Everything else stays usable.'
             : 'All three modules render normally.'}
       </p>
     </Card>
@@ -79,9 +89,16 @@ function Slot({ id, className, metrics, topology }: { id: ModuleId; className?: 
 
   if (status === 'failed') {
     return (
-      <div className={cn('flex min-h-20 flex-col items-center justify-center gap-1 rounded border border-dashed border-failed/40 bg-failed/[0.05] p-2 text-center', className)}>
+      <div
+        className={cn(
+          'flex min-h-20 flex-col items-center justify-center gap-1 rounded border border-dashed border-failed/40 bg-failed/[0.05] p-2 text-center',
+          className,
+        )}
+      >
         {cached ? <History className="size-3.5 text-degraded" /> : <AlertTriangle className="size-3.5 text-failed" />}
-        <span className="text-[10.5px] font-medium text-fg">{cached ? `${label}: showing cached data` : `${label} is unavailable`}</span>
+        <span className="text-[10.5px] font-medium text-fg">
+          {cached ? `${label}: showing cached data` : `${label} is unavailable`}
+        </span>
         {!cached && (
           <span className="inline-flex items-center gap-1 text-[9.5px] text-fg-subtle">
             <RefreshCw className="size-2.5" /> Retry
@@ -93,7 +110,13 @@ function Slot({ id, className, metrics, topology }: { id: ModuleId; className?: 
 
   const shaky = status === 'degraded' || status === 'warning'
   return (
-    <div className={cn('flex min-h-20 flex-col gap-1.5 rounded border p-2', shaky ? 'border-degraded/40' : 'border-border', className)}>
+    <div
+      className={cn(
+        'flex min-h-20 flex-col gap-1.5 rounded border p-2',
+        shaky ? 'border-degraded/40' : 'border-border',
+        className,
+      )}
+    >
       <div className="flex items-center justify-between">
         <span className="text-[10px] font-medium text-fg-muted">{label}</span>
         {shaky && <span className="font-mono text-[9px] text-degraded">some errors</span>}

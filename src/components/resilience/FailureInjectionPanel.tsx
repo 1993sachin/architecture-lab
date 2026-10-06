@@ -48,6 +48,7 @@ export function FailureInjectionPanel({ className }: { className?: string }) {
                 key={service}
                 type="button"
                 aria-pressed={down}
+                data-guide-target={`res-kill-${service}`}
                 onClick={() => toggleKill(service)}
                 className={cn(
                   'flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-left text-[13px] font-medium transition-colors',

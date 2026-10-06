@@ -16,6 +16,8 @@ export const experiments: ExperimentMeta[] = [
     concepts: ['Microfrontends', 'Fault isolation', 'Lazy loading', 'Caching'],
     icon: Boxes,
     status: 'available',
+    difficulty: 'Beginner',
+    guideId: 'microfrontend',
   },
   {
     id: 'resilience',
@@ -27,6 +29,8 @@ export const experiments: ExperimentMeta[] = [
     concepts: ['Retries', 'Circuit breaker', 'Caching', 'Async processing'],
     icon: ShieldAlert,
     status: 'available',
+    difficulty: 'Intermediate',
+    guideId: 'resilience',
   },
   {
     id: 'simulator',
@@ -38,5 +42,7 @@ export const experiments: ExperimentMeta[] = [
     concepts: ['System design', 'Trade-offs', 'Scalability', 'Cost'],
     icon: Workflow,
     status: 'available',
+    difficulty: 'Advanced',
+    guideId: 'simulator-url-shortener',
   },
 ]

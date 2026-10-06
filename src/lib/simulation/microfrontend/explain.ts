@@ -9,6 +9,7 @@ export interface Explanation {
 }
 
 const pct = (v: number) => `${Math.round(v * 100)}%`
+const list = (items: string[]) => (items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`)
 
 /**
  * Explains the current state in plain engineering language. Rule-based on
@@ -16,7 +17,8 @@ const pct = (v: number) => `${Math.round(v * 100)}%`
  */
 export function explainState(config: MfeConfig, metrics: MfeMetrics): Explanation {
   const isMfe = config.mode === 'microfrontends'
-  const failing = config.failure === 'none' ? null : config.failure
+  const failures = config.failures
+  const failing = failures.length ? failures[0] : null
   const details: string[] = []
 
   if (failing && !isMfe) {
@@ -33,24 +35,35 @@ export function explainState(config: MfeConfig, metrics: MfeMetrics): Explanatio
   }
 
   if (failing) {
-    const label = MODULE_LABELS[failing]
-    let headline = `${label} MFE is unavailable. The rest of the application keeps working.`
-    const others = MODULES.filter((m) => m !== failing).map((m) => MODULE_LABELS[m])
-    details.push(
-      `Because the application shell loads each microfrontend independently, ${others.join(' and ')} stay available. The shell renders a fallback in the ${label} slot instead of crashing.`,
-    )
+    const label = list(failures.map((m) => MODULE_LABELS[m]))
+    const others = MODULES.filter((m) => !failures.includes(m)).map((m) => MODULE_LABELS[m])
+    const plural = failures.length > 1
+    let headline =
+      others.length === 0
+        ? 'Every microfrontend is down. The shell is up, but there is nothing left to show.'
+        : plural
+          ? `${label} MFEs are unavailable. ${list(others)} keeps working.`
+          : `${label} MFE is unavailable. The rest of the application keeps working.`
+    if (others.length) {
+      details.push(
+        `Because the application shell loads each microfrontend independently, ${list(others)} ${others.length > 1 ? 'stay' : 'stays'} available. The shell renders a fallback in the ${label} ${plural ? 'slots' : 'slot'} instead of crashing.`,
+      )
+      if (plural) details.push('Each failure is contained to its own slot: two independent parts failed, and neither took the other modules with it.')
+    }
     if (config.caching) {
-      details.push(`Caching lets some ${label} requests be served from a stale cached copy (${pct(metrics.moduleCacheRate[failing])} right now), so users see old data instead of an error.`)
+      details.push(
+        `Caching lets some ${label} requests be served from a stale cached copy (${pct(Math.max(...failures.map((m) => metrics.moduleCacheRate[m])))} right now), so users see old data instead of an error.`,
+      )
     }
     if (!config.lazyLoading) {
       details.push('Modules are loaded eagerly, so the shell waits for the dead remote to time out before it can render anything. Every page is slower, not just the broken one.')
-      headline = `${label} MFE is down, and eager loading is slowing every page.`
+      headline = `${label} ${plural ? 'MFEs are' : 'MFE is'} down, and eager loading is slowing every page.`
     }
     if (!config.independentDeployment) {
       details.push('Microfrontends are released together, so fixing one module means rolling back or redeploying all of them. Healthy modules see errors and extra latency during the coupled release.')
-      headline = `${label} MFE is down, and the shared release is spreading the damage.`
+      headline = `${label} ${plural ? 'MFEs are' : 'MFE is'} down, and the shared release is spreading the damage.`
     }
-    details.push(`Availability is ${pct(metrics.availability)}, limited to roughly the share of traffic that ${label} handles.`)
+    details.push(`Availability is ${pct(metrics.availability)}: roughly the share of traffic that ${label} ${plural ? "don't" : "doesn't"} handle.`)
     return { tone: 'warning', headline, details }
   }
 
@@ -97,10 +110,10 @@ export function explainChange(key: ControlKey, config: MfeConfig): string {
       return config.mode === 'monolith'
         ? 'Switched to a monolith: one build, one deployment, one runtime. Simpler to run, but every module now shares the same blast radius.'
         : 'Switched to microfrontends: each module is built and deployed on its own and composed at runtime by the shell.'
-    case 'failure':
-      return config.failure === 'none'
-        ? 'Restored all modules. Watch availability recover in the metrics.'
-        : `Took ${MODULE_LABELS[config.failure]} offline. Compare how far the failure spreads in each architecture mode.`
+    case 'failures':
+      return config.failures.length === 0
+        ? 'Every module is back online. Watch availability recover in the metrics.'
+        : `${list(config.failures.map((m) => MODULE_LABELS[m]))} ${config.failures.length > 1 ? 'are' : 'is'} offline. Compare how far the failure spreads in each architecture mode.`
     case 'latencyMs':
       return 'Network latency affects every hop. Microfrontends make more network hops than a monolith, so they feel it more.'
     case 'apiFailureRate':

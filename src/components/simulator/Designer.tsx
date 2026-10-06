@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type DragEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from 'react'
 import { MarkerType, type Connection, type EdgeChange, type NodeChange, type ReactFlowInstance } from '@xyflow/react'
 import { AnimatePresence, m } from 'framer-motion'
 import {
@@ -9,6 +9,7 @@ import {
   FileUp,
   LayoutGrid,
   Link2,
+  MessageCircleQuestion,
   Play,
   RotateCcw,
   SlidersHorizontal,
@@ -17,11 +18,13 @@ import {
 import { cn } from '@/lib/cn'
 import {
   COMPONENT_BY_TYPE,
+  coachPrompt,
   diffArchitectures,
   evaluateArchitecture,
   exportArchitecture,
   importArchitecture,
   isEmptyDiff,
+  nextHints,
   validateArchitecture,
   type Architecture,
   type Challenge,
@@ -38,13 +41,21 @@ import { Button, IconButton } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { Drawer } from '@/components/ui/Drawer'
 import { ChallengeBrief } from './ChallengeBrief'
-import { DIFFICULTY_TONE } from './ChallengeList'
+import { DIFFICULTY_TONE } from '@/components/ui/DifficultyBadge'
 import { ConfigPanel } from './ConfigPanel'
 import { EvaluationResults } from './EvaluationResults'
 import { IssuesPanel } from './IssuesPanel'
 import { Palette } from './Palette'
 import { DRAG_MIME, KIND_OF } from './componentKinds'
 import { copyText, downloadBlob, renderResultCard, shareUrl } from './share'
+import { urlShortenerWalkthrough, WALKTHROUGH_ID, type WalkthroughState } from './walkthrough'
+import { useGuideRun, useGuideStore } from '@/store/guideStore'
+import { CoachPanel } from '@/components/guide/CoachPanel'
+import { ContextualHelp } from '@/components/guide/ContextualHelp'
+import { SIMULATOR_HELP } from './help'
+import { GuidedExperiment } from '@/components/guide/GuidedExperiment'
+import { HintPanel } from '@/components/guide/HintPanel'
+import { TrySomething, type TryIdea } from '@/components/guide/TrySomething'
 
 type Tab = 'requirements' | 'configure' | 'issues'
 
@@ -59,6 +70,45 @@ const PHASES = [
 const PHASE_MS = 260
 const NODE_W = 200
 const NODE_H = 90
+
+/** Where the walkthrough places each component, relative to the Client, so the design reads top to bottom. */
+const WALKTHROUGH_SPOTS: Partial<Record<ComponentType, { x: number; y: number }>> = {
+  cdn: { x: 0, y: 140 },
+  gateway: { x: 0, y: 280 },
+  service: { x: 0, y: 420 },
+  cache: { x: -150, y: 570 },
+  sql: { x: 150, y: 570 },
+}
+
+function designIdeas(challenge: Challenge): TryIdea[] {
+  return [
+    {
+      id: 'four',
+      text: `Try designing the ${challenge.title} with only 4 components.`,
+      watch: 'which scores suffer, and which do not',
+    },
+    {
+      id: 'no-cache',
+      text: 'Evaluate, remove your cache, and re-evaluate.',
+      watch: 'the before/after table: performance versus complexity',
+    },
+    {
+      id: 'replicas',
+      text: 'Run every service with 3 instances and replicate the database.',
+      watch: 'reliability going up and cost going up with it',
+    },
+    {
+      id: 'nosql',
+      text: 'Switch your database between SQL and NoSQL and re-evaluate.',
+      watch: 'what the evaluator says about consistency and scale',
+    },
+    {
+      id: 'queue',
+      text: 'Put a Message Queue and a Worker behind one service.',
+      watch: 'the trade-off explanation about eventual consistency',
+    },
+  ]
+}
 
 /** Picks anchor sides from the relative position of two nodes, so edges read naturally. */
 function pickHandles(s: DesignNode, t: DesignNode) {
@@ -86,10 +136,15 @@ export function Designer({
   challenge,
   onBack,
   onSwitchChallenge,
+  walkthrough = false,
+  onExitWalkthrough,
 }: {
   challenge: Challenge
   onBack: () => void
   onSwitchChallenge: (id: string) => void
+  /** Run the beginner walkthrough on top of the designer. */
+  walkthrough?: boolean
+  onExitWalkthrough?: () => void
 }) {
   const arch = useDraft(challenge.id)
   const store = useSimulatorStore
@@ -275,17 +330,70 @@ export function Designer({
     }
     const snapshot: Architecture = structuredClone(arch)
     const step = reducedMotion ? 80 : PHASE_MS
+    const scroll = !walkthrough
     setPhase(0)
     PHASES.forEach((_, i) => window.setTimeout(() => setPhase(i), i * step))
     window.setTimeout(() => {
       store.getState().recordEvaluation({ architecture: snapshot, evaluation: evaluateArchitecture(snapshot, challenge) })
       setPhase(null)
-      window.setTimeout(
-        () => resultsRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }),
-        60,
-      )
+      // The walkthrough explains the result above the canvas, so it does not jump away.
+      if (scroll)
+        window.setTimeout(
+          () => resultsRef.current?.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }),
+          60,
+        )
     }, PHASES.length * step)
-  }, [validation.canEvaluate, phase, arch, reducedMotion, store, challenge, desktop])
+  }, [validation.canEvaluate, phase, arch, reducedMotion, store, challenge, desktop, walkthrough])
+
+  // Beginner walkthrough: steps are data; these are the only things it can do to the designer.
+  const run = useGuideRun(WALKTHROUGH_ID)
+  const walkthroughDef = useMemo(
+    () =>
+      urlShortenerWalkthrough({
+        begin: () => {
+          store.getState().clearDesign(challenge.id)
+          setSelection({ node: null, edge: null })
+        },
+        add: (type, label) => {
+          const draft = store.getState().drafts[challenge.id]
+          const client = draft?.nodes.find((n) => n.type === 'client')
+          const spot = WALKTHROUGH_SPOTS[type] ?? { x: 0, y: 300 }
+          const base = client?.position ?? { x: 0, y: 0 }
+          const id = store.getState().addNode(challenge.id, type, { x: base.x + spot.x, y: base.y + spot.y })
+          if (label) store.getState().updateNode(challenge.id, id, { label })
+          window.setTimeout(() => flow.current?.fitView({ padding: 0.2, maxZoom: 1, duration: reducedMotion ? 0 : 300 }), 50)
+        },
+        evaluate,
+      }),
+    [challenge.id, store, evaluate, reducedMotion],
+  )
+  const walkthroughState = useMemo<WalkthroughState>(
+    () => ({ arch, validation, evaluation: current && !stale ? current.evaluation : null }),
+    [arch, validation, current, stale],
+  )
+  const hideWorkspace = walkthrough && !run.done && run.step === 0 && !run.ctx.flags.started
+  useEffect(() => {
+    if (walkthrough && run.dismissed) onExitWalkthrough?.()
+  }, [walkthrough, run.dismissed, onExitWalkthrough])
+
+  // Coach Mode: a question about each component the visitor adds. It never edits the design.
+  const coachOn = useGuideStore((s) => s.coach) && !walkthrough
+  const [coach, setCoach] = useState<{ nodeId: string; type: ComponentType; label: string } | null>(null)
+  const knownIds = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const ids = new Set(arch.nodes.map((n) => n.id))
+    const before = knownIds.current
+    knownIds.current = ids
+    if (!before || !coachOn) return
+    const added = arch.nodes.filter((n) => !before.has(n.id))
+    const last = added[added.length - 1]
+    if (added.length === 1 && last && coachPrompt(last.type, challenge))
+      setCoach({ nodeId: last.id, type: last.type, label: last.label })
+  }, [arch.nodes, coachOn, challenge])
+  const coachContent = coach && arch.nodes.some((n) => n.id === coach.nodeId) ? coachPrompt(coach.type, challenge) : null
+
+  const hints = useMemo(() => nextHints(arch, challenge), [arch, challenge])
+  const ideas = useMemo(() => designIdeas(challenge), [challenge])
 
   const share = useCallback(async () => {
     const url = shareUrl(arch)
@@ -433,6 +541,7 @@ export function Designer({
           <span className="text-xs text-accent" aria-live="polite">
             {status}
           </span>
+          <ContextualHelp content={SIMULATOR_HELP} />
           <Button variant="ghost" size="sm" onClick={share} title="Copy a link that reopens this design">
             <Link2 className="size-3.5" aria-hidden="true" /> Copy Share Link
           </Button>
@@ -459,7 +568,11 @@ export function Designer({
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)_300px]">
+      {walkthrough && (
+        <GuidedExperiment guide={walkthroughDef} state={walkthroughState} onStart={() => undefined} className="mt-4" />
+      )}
+
+      <div className={cn('mt-4 grid gap-4 lg:grid-cols-[200px_minmax(0,1fr)_300px]', hideWorkspace && 'hidden')}>
         {desktop && (
           <Card className="max-h-[680px] self-start overflow-y-auto p-2">
             <Palette onAdd={addCentered} />
@@ -497,6 +610,23 @@ export function Designer({
               {arch.nodes.length} components · {arch.edges.length} connections
             </span>
             <div className="ml-auto flex items-center gap-1">
+              {!walkthrough && (
+                <button
+                  type="button"
+                  aria-pressed={coachOn}
+                  onClick={() => {
+                    useGuideStore.getState().setCoach(!coachOn)
+                    setCoach(null)
+                  }}
+                  title="Coach Mode asks a question about each component you add"
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[12px] font-medium transition-colors',
+                    coachOn ? 'border-accent/50 bg-accent-soft text-accent' : 'border-border text-fg-muted hover:text-fg',
+                  )}
+                >
+                  <MessageCircleQuestion className="size-3.5" aria-hidden="true" /> Coach {coachOn ? 'on' : 'off'}
+                </button>
+              )}
               {selection.node && (
                 <IconButton label="Configure selected component" onClick={() => select(selection.node)}>
                   <SlidersHorizontal className="size-3.5" aria-hidden="true" />
@@ -507,6 +637,12 @@ export function Designer({
               </IconButton>
             </div>
           </div>
+          {!walkthrough && (
+            <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border px-3 py-2">
+              <HintPanel hints={hints.hints} resetKey={hints.id} className="min-w-0 flex-1 basis-64 self-center" />
+              <TrySomething ideas={ideas} className="flex flex-col items-end" />
+            </div>
+          )}
           <div
             ref={canvasRef}
             className="relative"
@@ -519,6 +655,8 @@ export function Designer({
             }}
           >
             <ArchitectureCanvas
+              // Mount fresh once the walkthrough reveals the canvas, so it measures its real size.
+              key={hideWorkspace ? 'waiting' : 'ready'}
               nodes={nodes}
               edges={edges}
               description={`${challenge.title} design with ${arch.nodes.length} components: ${arch.nodes.map((n) => n.label).join(', ')}.`}
@@ -543,10 +681,22 @@ export function Designer({
             />
             {arch.nodes.length <= 1 && phase === null && (
               <div className="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center pr-14 pl-4">
-                <p className="rounded-md border border-border bg-surface/90 px-3 py-2 text-center text-[12.5px] text-fg-muted shadow-sm backdrop-blur">
-                  {desktop ? 'Drag components from the left' : 'Add components'}, then drag from a dot on one component to another
-                  to connect them.
+                <p className="max-w-md rounded-md border border-border bg-surface/90 px-3 py-2 text-center text-[12.5px] text-fg-muted shadow-sm backdrop-blur">
+                  <span className="font-medium text-fg">You’re designing a {challenge.title}.</span> What should receive the
+                  Client’s requests first? {desktop ? 'Drag components from the left' : 'Add components'}, then drag from a dot on
+                  one component to another to connect them.
                 </p>
+              </div>
+            )}
+            {coachContent && coach && (
+              <div className="absolute top-3 left-3 z-10 w-[min(22rem,calc(100%-1.5rem))]">
+                <CoachPanel
+                  key={coach.nodeId}
+                  title={`You added ${coach.label}`}
+                  question={coachContent.question}
+                  explanation={coachContent.explain}
+                  onContinue={() => setCoach(null)}
+                />
               </div>
             )}
             <AnimatePresence>

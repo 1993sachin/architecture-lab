@@ -31,7 +31,7 @@ export const WINDOW_TICKS = 6
 
 export const DEFAULT_CONFIG: MfeConfig = {
   mode: 'microfrontends',
-  failure: 'none',
+  failures: [],
   latencyMs: 40,
   apiFailureRate: 0.02,
   caching: false,
@@ -90,7 +90,7 @@ export function resolveRequest(module: ModuleId, config: MfeConfig, rng: Rng): R
   const label = MODULE_LABELS[module]
   const net = config.latencyMs
   const isMfe = config.mode === 'microfrontends'
-  const failing = config.failure !== 'none' ? config.failure : null
+  const failing = config.failures.length ? config.failures[0] : null
 
   // Client-side cost: shell render, plus fetching the remote module in MFE mode.
   let latency = LATENCY.shell
@@ -110,7 +110,7 @@ export function resolveRequest(module: ModuleId, config: MfeConfig, rng: Rng): R
   // Eagerly loaded microfrontends make the shell wait for a dead remote on boot.
   if (isMfe && failing && !config.lazyLoading) latency += LATENCY.remoteTimeout
 
-  if (isMfe && failing === module) {
+  if (isMfe && config.failures.includes(module)) {
     if (config.caching && rng.chance(PROBABILITY.staleServe)) {
       return { outcome: 'cached', status: 200, latency: Math.round(latency + LATENCY.cacheHit), note: `${label} served from cache (stale)` }
     }
