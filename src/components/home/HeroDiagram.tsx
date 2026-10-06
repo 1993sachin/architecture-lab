@@ -135,7 +135,15 @@ export function HeroDiagram() {
             const stroke = broken ? 'var(--failed)' : 'var(--border-strong)'
             return (
               <g key={m.id}>
-                <path d={top} fill="none" stroke={stroke} strokeWidth={1.5} strokeDasharray={broken ? '4 4' : undefined} className={broken && !reducedMotion ? 'animate-flow' : undefined} opacity={broken ? 0.7 : 1} />
+                <path
+                  d={top}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={1.5}
+                  strokeDasharray={broken ? '4 4' : undefined}
+                  className={broken && !reducedMotion ? 'animate-flow' : undefined}
+                  opacity={broken ? 0.7 : 1}
+                />
                 <path d={bottom} fill="none" stroke={broken ? 'var(--border)' : 'var(--border-strong)'} strokeWidth={1.5} />
                 {!broken && !reducedMotion && (
                   <>
@@ -143,7 +151,12 @@ export function HeroDiagram() {
                       <animateMotion dur="1.8s" repeatCount="indefinite" path={top} begin={`-${modules.indexOf(m) * 0.4}s`} />
                     </circle>
                     <circle r={2.5} fill="var(--accent)" opacity={0.6}>
-                      <animateMotion dur="1.2s" repeatCount="indefinite" path={bottom} begin={`-${modules.indexOf(m) * 0.3 + 0.6}s`} />
+                      <animateMotion
+                        dur="1.2s"
+                        repeatCount="indefinite"
+                        path={bottom}
+                        begin={`-${modules.indexOf(m) * 0.3 + 0.6}s`}
+                      />
                     </circle>
                   </>
                 )}
@@ -188,7 +201,10 @@ export function HeroDiagram() {
         ))}
       </div>
 
-      <p aria-live="polite" className="min-h-[3.25rem] border-t border-border px-4 py-3 text-[13px] leading-relaxed text-fg-muted">
+      <p
+        aria-live="polite"
+        className="min-h-[3.25rem] border-t border-border px-4 py-3 text-[13px] leading-relaxed text-fg-muted"
+      >
         <span className="mr-1.5 font-mono text-[11px] text-fg-subtle uppercase">What happened</span>
         {explanation}
       </p>

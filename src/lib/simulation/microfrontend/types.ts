@@ -1,6 +1,5 @@
 export type ArchitectureMode = 'monolith' | 'microfrontends'
 export type ModuleId = 'workspace' | 'content' | 'analytics'
-export type FailureTarget = ModuleId | 'none'
 
 export const MODULES: ModuleId[] = ['workspace', 'content', 'analytics']
 
@@ -12,7 +11,8 @@ export const MODULE_LABELS: Record<ModuleId, string> = {
 
 export interface MfeConfig {
   mode: ArchitectureMode
-  failure: FailureTarget
+  /** Modules taken offline, in MODULES order. Several can be down at once. */
+  failures: ModuleId[]
   /** Extra network latency added to every network hop, in ms. */
   latencyMs: number
   /** Probability (0–1) that a backend API call fails. */

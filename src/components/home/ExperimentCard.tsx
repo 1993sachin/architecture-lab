@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { ArrowUpRight, FlaskConical } from 'lucide-react'
 import type { ExperimentMeta } from '@/types/experiment'
 import { Badge } from '@/components/ui/Badge'
+import { DifficultyBadge } from '@/components/ui/DifficultyBadge'
 
 export function ExperimentCard({ experiment }: { experiment: ExperimentMeta }) {
   const Icon = experiment.icon
@@ -14,7 +15,13 @@ export function ExperimentCard({ experiment }: { experiment: ExperimentMeta }) {
         <span className="inline-flex size-9 items-center justify-center rounded-md border border-border bg-surface-2 text-fg-muted transition-colors group-hover:text-accent">
           <Icon className="size-[18px]" aria-hidden="true" />
         </span>
-        <ArrowUpRight className="size-4 text-fg-subtle transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-fg" aria-hidden="true" />
+        <span className="mr-2 ml-auto self-center">
+          <DifficultyBadge level={experiment.difficulty} />
+        </span>
+        <ArrowUpRight
+          className="size-4 text-fg-subtle transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:text-fg"
+          aria-hidden="true"
+        />
       </div>
       <h3 className="mt-4 text-[15px] font-semibold tracking-tight text-fg">{experiment.title}</h3>
       <p className="mt-1.5 flex-1 text-[13px] leading-relaxed text-fg-muted">{experiment.summary}</p>

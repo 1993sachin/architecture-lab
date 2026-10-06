@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
 import { ChallengeBrief } from './ChallengeBrief'
-import { DIFFICULTY_TONE } from './ChallengeList'
+import { DIFFICULTY_TONE } from '@/components/ui/DifficultyBadge'
 
 interface ChallengeDetailsProps {
   challenge: Challenge

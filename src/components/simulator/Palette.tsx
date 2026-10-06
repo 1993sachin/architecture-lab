@@ -31,6 +31,7 @@ export function Palette({ onAdd }: { onAdd: (type: ComponentType) => void }) {
                     onClick={() => onAdd(c.type)}
                     title={`${c.description}. Drag onto the canvas, or click to add.`}
                     aria-label={`Add ${c.label}`}
+                    data-guide-target={`palette-${c.type}`}
                     className="group flex w-full cursor-grab items-center gap-2 rounded-md border border-transparent px-2 py-1.5 text-left text-[13px] text-fg-muted transition-colors hover:border-border hover:bg-surface-2 hover:text-fg active:cursor-grabbing"
                   >
                     <span className="inline-flex size-6 shrink-0 items-center justify-center rounded border border-border bg-surface-2 text-fg-muted group-hover:text-fg">

@@ -1,8 +1,9 @@
-import { useId } from 'react'
+import { useId, useState } from 'react'
 import { ArrowLeftRight, Copy, MousePointerClick, Trash2 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import {
   COMPONENT_BY_TYPE,
+  whyComponent,
   type Challenge,
   type ComponentConfig,
   type DesignEdge,
@@ -69,6 +70,7 @@ function NodeConfig({
   const isCompute = ['service', 'worker', 'function', 'webapp'].includes(node.type)
   const scalable = ['service', 'worker', 'webapp', 'gateway', 'loadBalancer'].includes(node.type)
   const isDb = node.type === 'sql' || node.type === 'nosql'
+  const why = whyComponent(node.type, challenge)
 
   return (
     <div className="space-y-5">
@@ -79,6 +81,7 @@ function NodeConfig({
         <div className="min-w-0">
           <div className="font-mono text-[10.5px] tracking-wider text-fg-subtle uppercase">{def.label}</div>
           <p className="text-xs text-fg-subtle">{def.description}</p>
+          {why && <WhyToggle key={node.id} text={why} />}
         </div>
       </div>
 
@@ -299,6 +302,24 @@ function EdgeConfig({ edge, nodes, issues, onDeleteEdge, onReverseEdge }: Config
           <Trash2 className="size-3.5" aria-hidden="true" /> Delete
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** "Why?": one or two sentences on why this component fits this challenge. Optional, collapsed by default. */
+function WhyToggle({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="mt-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="text-xs font-medium text-accent hover:underline"
+      >
+        Why?
+      </button>
+      {open && <p className="mt-1 text-xs leading-relaxed text-fg-muted">{text}</p>}
     </div>
   )
 }

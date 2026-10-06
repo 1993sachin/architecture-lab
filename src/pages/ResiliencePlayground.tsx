@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Pause, Play, RotateCcw, Send, SendHorizontal } from 'lucide-react'
 import { cn } from '@/lib/cn'
@@ -32,6 +32,12 @@ import { RequestTimeline } from '@/components/resilience/RequestTimeline'
 import { ScenarioPanel } from '@/components/resilience/ScenarioPanel'
 import { TradeoffGrid } from '@/components/resilience/TradeoffGrid'
 import { LESSONS } from '@/components/resilience/tradeoffs'
+import { RESILIENCE_GUIDE, RESILIENCE_HELP, RESILIENCE_IDEAS } from '@/components/resilience/guide'
+import { ContextualHelp } from '@/components/guide/ContextualHelp'
+import { GuidedExperiment } from '@/components/guide/GuidedExperiment'
+import { ModeSwitch } from '@/components/guide/ModeSwitch'
+import { TrySomething } from '@/components/guide/TrySomething'
+import { useExperienceMode, useGuideRun, useGuideStore, type ExperienceMode } from '@/store/guideStore'
 
 const BADGE_TONE: Record<RequestBadge, string> = {
   'IN FLIGHT': 'border-accent/40 bg-accent-soft text-accent',
@@ -77,6 +83,21 @@ export default function ResiliencePlayground() {
   const reset = useResilienceStore((s) => s.reset)
   const clearTimeline = useResilienceStore((s) => s.clearTimeline)
   const playback = useRequestPlayback()
+
+  // Guided Mode by default on a first visit; Free Explore once the guide is done.
+  const [mode, setMode] = useExperienceMode(RESILIENCE_GUIDE.id)
+  const run = useGuideRun(RESILIENCE_GUIDE.id)
+  // A shared link opens the configuration it carries, not the walkthrough (until the visitor asks for it).
+  const [fromLink, setFromLink] = useState(() => new URLSearchParams(window.location.hash.split('?')[1] ?? '').size > 0)
+  const showGuide = !fromLink && (mode === 'guided' || (run.done && !run.dismissed))
+  const changeMode = (next: ExperienceMode) => {
+    setFromLink(false)
+    if (next === 'guided' && run.done) {
+      useGuideStore.getState().start(RESILIENCE_GUIDE.id)
+      reset()
+    }
+    setMode(next)
+  }
 
   // Shareable state: a link with parameters configures the run; later changes keep the URL current.
   const [searchParams, setSearchParams] = useSearchParams()
@@ -188,6 +209,7 @@ export default function ResiliencePlayground() {
     <div className="container-page max-w-7xl py-8 sm:py-10">
       <ExperimentHeader
         eyebrow="Experiment 02"
+        difficulty="Intermediate"
         title="Resilience Playground"
         description={
           <p>
@@ -197,15 +219,25 @@ export default function ResiliencePlayground() {
           </p>
         }
         actions={
-          <Button variant="secondary" size="sm" onClick={reset}>
-            <RotateCcw className="size-3.5" aria-hidden="true" /> Reset Simulation
-          </Button>
+          <>
+            <ModeSwitch mode={showGuide ? 'guided' : 'free'} onChange={changeMode} />
+            <ContextualHelp content={RESILIENCE_HELP} />
+            <Button variant="secondary" size="sm" onClick={reset}>
+              <RotateCcw className="size-3.5" aria-hidden="true" /> Reset Simulation
+            </Button>
+          </>
         }
-      />
+      >
+        {!showGuide && <TrySomething ideas={RESILIENCE_IDEAS} className="mt-5" />}
+      </ExperimentHeader>
 
-      <div className="mt-6">
-        <ScenarioPanel active={scenarioId} onSelect={loadScenario} onReset={resetScenario} />
-      </div>
+      {showGuide ? (
+        <GuidedExperiment guide={RESILIENCE_GUIDE} state={{ config, sim, busy }} onStart={reset} className="mt-6" />
+      ) : (
+        <div className="mt-6">
+          <ScenarioPanel active={scenarioId} onSelect={loadScenario} onReset={resetScenario} />
+        </div>
+      )}
 
       <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px] xl:grid-rows-[auto_auto_1fr]">
         <MetricsPanel metrics={metricTiles} columns={4} className="min-w-0 xl:col-start-1 xl:row-start-1" />
@@ -217,10 +249,16 @@ export default function ResiliencePlayground() {
               <StatusBadge status={topology.nodes.client} />
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" size="sm" onClick={() => queueRequests(1)}>
+              <Button variant="primary" size="sm" onClick={() => queueRequests(1)} data-guide-target="res-send">
                 <Send className="size-3.5" aria-hidden="true" /> Send Request
               </Button>
-              <Button variant="secondary" size="sm" onClick={() => queueRequests(10)} title="Send 10 requests, one after another">
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => queueRequests(10)}
+                title="Send 10 requests, one after another"
+                data-guide-target="res-send-10"
+              >
                 <SendHorizontal className="size-3.5" aria-hidden="true" /> Send 10
               </Button>
               <Button variant="secondary" size="sm" onClick={toggleAutoTraffic} aria-pressed={autoTraffic}>

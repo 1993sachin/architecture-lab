@@ -30,7 +30,7 @@ function flowFor(status: NodeStatus): FlowState {
  */
 export function deriveTopology(config: MfeConfig, metrics: MfeMetrics): MfeTopology {
   const isMfe = config.mode === 'microfrontends'
-  const failing = config.failure === 'none' ? null : config.failure
+  const failing = config.failures.length ? config.failures[0] : null
   const api = apiStatus(config)
 
   const modules = {} as Record<ModuleId, NodeStatus>
@@ -40,7 +40,7 @@ export function deriveTopology(config: MfeConfig, metrics: MfeMetrics): MfeTopol
 
   for (const id of MODULES) {
     let status: NodeStatus
-    if (failing === id) status = 'failed'
+    if (config.failures.includes(id)) status = 'failed'
     else if (failing && !isMfe) status = 'offline'
     else {
       const err = metrics.moduleErrorRate[id]

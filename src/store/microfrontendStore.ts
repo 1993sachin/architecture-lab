@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_CONFIG, type ControlKey, type MfeConfig } from '@/lib/simulation/microfrontend'
+import { DEFAULT_CONFIG, MODULES, type ControlKey, type MfeConfig, type ModuleId } from '@/lib/simulation/microfrontend'
 
 interface MicrofrontendStore {
   config: MfeConfig
@@ -9,6 +9,8 @@ interface MicrofrontendStore {
   /** Bumped on reset so the simulation hook can start a fresh run. */
   runId: number
   setControl: <K extends ControlKey>(key: K, value: MfeConfig[K]) => void
+  /** Takes a module offline, or brings it back. */
+  toggleModule: (id: ModuleId) => void
   applyPreset: (config: MfeConfig) => void
   toggleRunning: () => void
   reset: () => void
@@ -27,7 +29,13 @@ export const useMicrofrontendStore = create<MicrofrontendStore>()((set) => ({
       if (key === 'mode' && value === 'microfrontends') config.independentDeployment = true
       return { config, lastChange: key, running: true }
     }),
-  applyPreset: (config) => set((s) => ({ config, lastChange: 'failure', running: true, runId: s.runId + 1 })),
+  toggleModule: (id) =>
+    set((s) => {
+      const down = s.config.failures.includes(id)
+      const failures = MODULES.filter((m) => (m === id ? !down : s.config.failures.includes(m)))
+      return { config: { ...s.config, failures }, lastChange: 'failures', running: true }
+    }),
+  applyPreset: (config) => set((s) => ({ config, lastChange: 'failures', running: true, runId: s.runId + 1 })),
   toggleRunning: () => set((s) => ({ running: !s.running })),
   reset: () => set((s) => ({ config: DEFAULT_CONFIG, lastChange: null, running: true, runId: s.runId + 1 })),
 }))

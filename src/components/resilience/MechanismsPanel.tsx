@@ -29,12 +29,14 @@ export function MechanismsPanel({ className }: { className?: string }) {
       </ControlSection>
 
       <ControlSection title="Retry">
-        <Switch
-          label="Enable Retry"
-          description="Retry failed calls with a short backoff."
-          checked={config.retryEnabled}
-          onChange={(v) => setConfig({ retryEnabled: v }, { kind: 'mechanism', mechanism: 'retry', enabled: v })}
-        />
+        <div data-guide-target="res-retry">
+          <Switch
+            label="Enable Retry"
+            description="Retry failed calls with a short backoff."
+            checked={config.retryEnabled}
+            onChange={(v) => setConfig({ retryEnabled: v }, { kind: 'mechanism', mechanism: 'retry', enabled: v })}
+          />
+        </div>
         {config.retryEnabled && (
           <SegmentedControl
             label="Max retries"
@@ -50,14 +52,16 @@ export function MechanismsPanel({ className }: { className?: string }) {
       </ControlSection>
 
       <ControlSection title="Circuit breaker">
-        <Switch
-          label="Enable Circuit Breaker"
-          description="Stop calling a dependency after repeated failures."
-          checked={config.circuitBreakerEnabled}
-          onChange={(v) =>
-            setConfig({ circuitBreakerEnabled: v }, { kind: 'mechanism', mechanism: 'circuitBreaker', enabled: v })
-          }
-        />
+        <div data-guide-target="res-breaker">
+          <Switch
+            label="Enable Circuit Breaker"
+            description="Stop calling a dependency after repeated failures."
+            checked={config.circuitBreakerEnabled}
+            onChange={(v) =>
+              setConfig({ circuitBreakerEnabled: v }, { kind: 'mechanism', mechanism: 'circuitBreaker', enabled: v })
+            }
+          />
+        </div>
         {config.circuitBreakerEnabled && (
           <>
             <div className="grid grid-cols-2 gap-3">
