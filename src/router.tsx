@@ -1,6 +1,7 @@
 import { lazy } from 'react'
 import { createHashRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
+import { RouteError } from '@/pages/RouteError'
 
 // Every page is its own chunk; heavy experiments (React Flow) never load on the landing page.
 const Home = lazy(() => import('@/pages/Home'))
@@ -22,6 +23,7 @@ const NotFound = lazy(() => import('@/pages/NotFound'))
 export const router = createHashRouter([
   {
     element: <AppShell />,
+    errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
       { path: 'experiments', element: <Experiments /> },

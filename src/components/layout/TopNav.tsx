@@ -22,7 +22,9 @@ export function TopNav() {
   const location = useLocation()
 
   // Close the mobile menu whenever the route changes.
-  useEffect(() => setOpen(false), [location.pathname])
+  useEffect(() => {
+    setOpen(false)
+  }, [location.pathname])
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-bg/80 backdrop-blur-md supports-[backdrop-filter]:bg-bg/70">

@@ -6,7 +6,11 @@ import { Footer } from './Footer'
 
 function ScrollToTop() {
   const { pathname } = useLocation()
-  useEffect(() => window.scrollTo(0, 0), [pathname])
+  // Block body on purpose: browser extensions sometimes patch scrollTo to
+  // return a value, and React would then call that value as a cleanup.
+  useEffect(() => {
+    window.scrollTo(0, 0)
+  }, [pathname])
   return null
 }
 
