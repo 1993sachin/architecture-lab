@@ -1,0 +1,158 @@
+@import 'tailwindcss';
+
+/* Class-based dark mode: the `dark` class on <html> is the source of truth. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens.
+ * Semantic colors are CSS variables so the same utility (e.g. `bg-surface`)
+ * works in both themes. Dark is the primary theme.
+ */
+:root {
+  --bg: #fafafa;
+  --surface: #ffffff;
+  --surface-2: #f4f4f5;
+  --surface-3: #e9e9ec;
+  --border: #e4e4e7;
+  --border-strong: #d4d4d8;
+  --fg: #09090b;
+  --fg-muted: #52525b;
+  --fg-subtle: #71717a;
+  --accent: #059669;
+  --accent-fg: #ffffff;
+  --accent-soft: rgb(5 150 105 / 0.1);
+  --ring: #059669;
+  --grid: rgb(9 9 11 / 0.05);
+
+  --healthy: #059669;
+  --degraded: #b45309;
+  --warning: #c2410c;
+  --failed: #dc2626;
+  --offline: #71717a;
+  --info: #2563eb;
+}
+
+.dark {
+  --bg: #0a0a0b;
+  --surface: #111113;
+  --surface-2: #18181b;
+  --surface-3: #232327;
+  --border: #232327;
+  --border-strong: #333338;
+  --fg: #fafafa;
+  --fg-muted: #a1a1aa;
+  --fg-subtle: #71717a;
+  --accent: #34d399;
+  --accent-fg: #052e1f;
+  --accent-soft: rgb(52 211 153 / 0.1);
+  --ring: #34d399;
+  --grid: rgb(255 255 255 / 0.035);
+
+  --healthy: #34d399;
+  --degraded: #fbbf24;
+  --warning: #fb923c;
+  --failed: #f87171;
+  --offline: #71717a;
+  --info: #60a5fa;
+}
+
+@theme inline {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-subtle: var(--fg-subtle);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-ring: var(--ring);
+
+  --color-healthy: var(--healthy);
+  --color-degraded: var(--degraded);
+  --color-warning: var(--warning);
+  --color-failed: var(--failed);
+  --color-offline: var(--offline);
+  --color-info: var(--info);
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-bg text-fg font-sans antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--accent-soft);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+  code,
+  kbd,
+  pre {
+    @apply font-mono;
+  }
+}
+
+@layer components {
+  /* Faint engineering grid used behind hero sections and canvases. */
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, var(--grid) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  .container-page {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+}
+
+@keyframes flow-dash {
+  to {
+    stroke-dashoffset: -20;
+  }
+}
+@keyframes pulse-ring {
+  0% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+.animate-flow {
+  animation: flow-dash 1s linear infinite;
+}
+.animate-pulse-ring {
+  animation: pulse-ring 1.6s ease-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
