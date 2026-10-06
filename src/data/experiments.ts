@@ -15,7 +15,7 @@ export const experiments: ExperimentMeta[] = [
     tryThis: 'Take the Workspace MFE offline',
     concepts: ['Microfrontends', 'Fault isolation', 'Lazy loading', 'Caching'],
     icon: Boxes,
-    status: 'coming-soon',
+    status: 'available',
   },
   {
     id: 'resilience',
