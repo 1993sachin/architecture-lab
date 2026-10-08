@@ -1,11 +1,14 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, MinusCircle, Play, RotateCcw, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
+import { Brain, Circle, CheckCircle2, MinusCircle, Play, RotateCcw, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
 import type { Postmortem as EngineReport, Scenario, Simulation } from '@architecture-lab/engine'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 import { clock, count, ms, percent, usd } from '@/lib/incident/format'
 import { snapshotTopology } from '@/lib/incident/session'
 import { counterfactual, groupSignals, playbookRuns, summarize, tradeOffs, type RunSummary } from '@/lib/incident/review'
+import { decisionGuide } from '@/lib/incident/explain'
+import type { GuidanceUse } from '@/lib/incident/guidance/context'
+import { explainAlternative, reflect } from '@/lib/incident/guidance/reflection'
 import { Eyebrow } from './shared'
 import { StoryChart } from './StoryChart'
 import { TopologyView } from './TopologyView'
@@ -19,13 +22,18 @@ const OUTCOME: Record<EngineReport['summary']['outcome'], { label: string; class
 interface PostmortemProps {
   scenario: Scenario
   simulation: Simulation
+  /** Help the operator asked for. Reported, never scored. */
+  used?: GuidanceUse
   onRunAgain: () => void
   onReplay: () => void
 }
 
 /** The structured postmortem the engine produced, rendered. Nothing here is written by a model. */
-export function Postmortem({ scenario, simulation, onRunAgain, onReplay }: PostmortemProps) {
+const NO_HELP: GuidanceUse = { hints: 0, strongHints: 0, rescues: 0, reasoningFlows: 0, explanations: 0 }
+
+export function Postmortem({ scenario, simulation, used = NO_HELP, onRunAgain, onReplay }: PostmortemProps) {
   const report = simulation.getPostmortem()
+  const reflection = useMemo(() => reflect(simulation.getPostmortem(), scenario, used), [simulation, scenario, used])
   const mine = useMemo(() => summarize('Your run', simulation), [simulation])
   const playbooks = useMemo(() => playbookRuns(scenario), [scenario])
   const outcome =
@@ -81,6 +89,8 @@ export function Postmortem({ scenario, simulation, onRunAgain, onReplay }: Postm
           </Button>
         </div>
       </header>
+
+      <Reasoning reflection={reflection} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Section title="Impact">
@@ -172,6 +182,49 @@ export function Postmortem({ scenario, simulation, onRunAgain, onReplay }: Postm
 
       <CounterfactualPanel scenario={scenario} simulation={simulation} mine={mine} />
     </div>
+  )
+}
+
+function Reasoning({ reflection }: { reflection: ReturnType<typeof reflect> }) {
+  const help = reflection.guidance.filter((entry) => entry.count > 0)
+  return (
+    <Section title="Your reasoning" note="What you did that good incident reasoning looks like. Not part of the score.">
+      <p className="text-[15px] font-medium text-fg" data-testid="recovered">
+        {reflection.recovered}
+      </p>
+      <div className="mt-3 grid gap-4 md:grid-cols-2">
+        <ul className="space-y-1.5" aria-label="Reasoning checks">
+          {reflection.checks.map((check) => (
+            <li key={check.id} className="flex gap-2 text-[13px]">
+              {check.done ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-healthy" aria-label="Done" /> : <Circle className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-label="Not this time" />}
+              <span className={check.done ? 'text-fg' : 'text-fg-muted'}>{check.label}</span>
+            </li>
+          ))}
+        </ul>
+        <div>
+          <Eyebrow>Guidance used</Eyebrow>
+          {help.length === 0 ? (
+            <p className="mt-1 text-[13px] text-fg-muted">None. You worked it out on your own.</p>
+          ) : (
+            <ul className="mt-1 space-y-0.5 text-[13px] text-fg" aria-label="Guidance used">
+              {help.map((entry) => (
+                <li key={entry.label}>
+                  {entry.label}: <span className="font-mono">{entry.count}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="mt-1 text-[11.5px] text-fg-subtle">Asking for help is part of incident response. It doesn’t change your score.</p>
+        </div>
+      </div>
+      <div className="mt-3 flex gap-2 rounded-md border-l-2 border-accent bg-accent-soft px-3 py-2 text-[13.5px] leading-relaxed text-fg" data-testid="learning">
+        <Brain className="mt-1 size-3.5 shrink-0 text-accent" aria-hidden="true" />
+        <p>
+          <span className="font-semibold">Learning: </span>
+          {reflection.learning}
+        </p>
+      </div>
+    </Section>
   )
 }
 
@@ -306,12 +359,16 @@ function CounterfactualPanel({ scenario, simulation, mine }: { scenario: Scenari
   const [index, setIndex] = useState(0)
   const [replacement, setReplacement] = useState(NOTHING)
   const [result, setResult] = useState<RunSummary | null>(null)
+  const [why, setWhy] = useState<string[]>([])
   if (decisions.length === 0) return null
   const chosen = decisions[index]
   const compare = () => {
     const alternative = counterfactual(simulation, { index, replacement: replacement === NOTHING ? null : replacement }, scenario)
-    const title = replacement === NOTHING ? 'nothing' : (scenario.decisions.find((decision) => decision.id === replacement)?.title ?? replacement)
+    const definition = scenario.decisions.find((decision) => decision.id === replacement)
+    const title = replacement === NOTHING ? 'nothing' : (definition?.title ?? replacement)
     setResult({ ...summarize(`Instead: ${title}`, alternative) })
+    const guide = definition ? decisionGuide({ id: definition.id, kind: definition.reveals?.length ? 'investigate' : 'change', description: definition.description }, scenario.id) : null
+    setWhy(explainAlternative(simulation, alternative, chosen?.timestamp ?? 0, definition && guide ? { title: definition.title, guide } : null))
   }
   return (
     <Section title="Compare with another decision" note="The engine replays your run with one decision swapped. Everything else stays the same, at the same times.">
@@ -358,6 +415,13 @@ function CounterfactualPanel({ scenario, simulation, mine }: { scenario: Scenari
       {result && (
         <div className="mt-4" data-testid="counterfactual">
           <CompareTable runs={[mine, result]} />
+          {why.length > 0 && (
+            <ul className="mt-3 space-y-1 text-[13px] leading-snug text-fg" data-testid="counterfactual-why">
+              {why.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </Section>

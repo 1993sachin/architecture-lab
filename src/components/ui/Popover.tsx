@@ -15,6 +15,8 @@ interface ExplainableProps {
   className?: string
   /** Shown on hover: a one-line tooltip. */
   hint?: string
+  /** Called each time the panel opens. */
+  onOpen?: () => void
 }
 
 /**
@@ -22,7 +24,7 @@ interface ExplainableProps {
  * the incident stays visible and the panel closes on Escape, on a click
  * elsewhere, or with its close button.
  */
-export function Explainable({ label, title, children, content, className, hint }: ExplainableProps) {
+export function Explainable({ label, title, children, content, className, hint, onOpen }: ExplainableProps) {
   const [open, setOpen] = useState(false)
   const anchor = useRef<HTMLButtonElement>(null)
   const close = useCallback(() => setOpen(false), [])
@@ -35,7 +37,10 @@ export function Explainable({ label, title, children, content, className, hint }
         aria-expanded={open}
         aria-haspopup="dialog"
         title={hint}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) onOpen?.()
+          setOpen(!open)
+        }}
         className={cn('cursor-help', className)}
       >
         {children}

@@ -3,6 +3,8 @@ import type { Scenario } from '@architecture-lab/engine'
 import { Button } from '@/components/ui/Button'
 import { clock, usd } from '@/lib/incident/format'
 import type { IncidentView } from '@/lib/incident/session'
+import { cn } from '@/lib/cn'
+import { MODES, type Mode } from '@/lib/incident/guidance/modes'
 import { Eyebrow } from './shared'
 
 /**
@@ -23,7 +25,7 @@ const HOW = ['Understand what is happening.', 'Investigate what you don’t know
  * The first screen. Four lines set up the role before anything is on fire,
  * then what you will be judged on, then one button. The rest is reference.
  */
-export function Briefing({ scenario, view, onStart }: { scenario: Scenario; view: IncidentView; onStart: () => void }) {
+export function Briefing({ scenario, view, mode = 'guided', onMode, onStart }: { scenario: Scenario; view: IncidentView; mode?: Mode; onMode?: (mode: Mode) => void; onStart: () => void }) {
   const budget = view.budget.limit
   const { constraints } = scenario.initialState
   const slos = constraints.filter((constraint) => constraint.kind === 'metric')
@@ -68,7 +70,33 @@ export function Briefing({ scenario, view, onStart }: { scenario: Scenario; view
         </p>
       </section>
 
-      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+      {onMode && (
+        <div className="mt-5">
+          <p id="mode" className="text-sm font-medium text-fg">
+            How much help do you want? <span className="text-xs font-normal text-fg-subtle">Asking for help never lowers your score.</span>
+          </p>
+          <div role="radiogroup" aria-labelledby="mode" className="mt-2 grid gap-2 sm:grid-cols-3">
+            {Object.values(MODES).map((option) => {
+              const checked = option.id === mode
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  onClick={() => onMode(option.id)}
+                  className={cn('rounded-lg border px-3 py-2 text-left transition-colors', checked ? 'border-accent bg-accent-soft ring-1 ring-accent/40' : 'border-border bg-surface hover:border-accent')}
+                >
+                  <span className="block text-sm font-semibold text-fg">{option.label}</span>
+                  <span className="block text-[12px] leading-snug text-fg-muted">{option.summary}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button variant="primary" size="lg" onClick={onStart}>
           <Siren className="size-4" aria-hidden="true" />
           Start the incident

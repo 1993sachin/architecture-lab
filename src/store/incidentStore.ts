@@ -6,6 +6,10 @@ import {
   type IncidentView,
   type Transition,
 } from '@/lib/incident/session'
+import { EMPTY_HISTORY, guidanceContext, outcomeOf, type GuidanceHistory } from '@/lib/incident/guidance/context'
+import { situationOf, type SituationId } from '@/lib/incident/guidance/situation'
+import { nextLevel } from '@/lib/incident/guidance/struggle'
+import type { Mode } from '@/lib/incident/guidance/modes'
 
 /**
  * Everything the operator did, as UI-level moves. Replaying the same moves
@@ -20,6 +24,12 @@ export type Move =
 export interface StatedHypothesis {
   id: string
   label: string
+}
+
+/** Which rung of the guidance ladder is showing, and for which situation. */
+export interface HintState {
+  level: 2 | 3 | 4
+  situation: SituationId
 }
 
 export type Phase = 'briefing' | 'paged' | 'running' | 'postmortem'
@@ -52,7 +62,29 @@ interface IncidentStore {
   /** The hypothesis they held when they made the move shown in `transition`. */
   transitionHypothesis: StatedHypothesis | null
 
+  /** How much the runner helps. Never sent to the engine and never scored. */
+  mode: Mode
+  /** What the operator did and what it did to the system, plus the help they asked for. Read by guidance only. */
+  guidance: GuidanceHistory
+  hint: HintState | null
+  /** Whether the hint card is showing. A move closes it; the ladder position is kept for the next ask. */
+  hintOpen: boolean
+  /** The struggle prompt was dismissed after this many moves; it stays away until something new happens. */
+  promptDismissedAt: number
+  /** What the operator says they are trying to improve with the next decision. Optional. */
+  objective: string | null
+  /** The objective they had for the move shown in `transition`. */
+  transitionObjective: string | null
+
   setHypothesis: (hypothesis: StatedHypothesis | null) => void
+  setMode: (mode: Mode) => void
+  setObjective: (objective: string | null) => void
+  /** Climb one rung of the ladder (or start at the hint when the situation changed). */
+  askHint: (stuck?: boolean) => void
+  closeHint: () => void
+  dismissPrompt: () => void
+  noteReasoningFlow: () => void
+  noteExplanation: (id: string) => void
   start: () => void
   acknowledgePage: () => void
   select: (decisionId: string) => void
@@ -83,6 +115,12 @@ function fresh() {
     replay: null,
     hypothesis: null,
     transitionHypothesis: null,
+    guidance: EMPTY_HISTORY,
+    hint: null,
+    hintOpen: false,
+    promptDismissedAt: 0,
+    objective: null,
+    transitionObjective: null,
   }
 }
 
@@ -105,17 +143,24 @@ function perform(session: IncidentSession, move: Move): { transition: Transition
 export const useIncidentStore = create<IncidentStore>((set, get) => {
   /** Runs a live move and records it. */
   const play = (move: Move, extra: Partial<IncidentStore> = {}) => {
-    const { session, moves } = get()
+    const { session, moves, guidance } = get()
     const { transition, rejection } = perform(session, move)
+    const decided = transition !== null && move.type === 'decide'
     set({
       view: session.view(),
       moves: [...moves, move],
       transition: transition ?? get().transition,
       constraintAlert: transition?.constraintChanges[0] ?? null,
       rejection,
+      guidance: {
+        ...guidance,
+        outcomes: transition ? [...guidance.outcomes, outcomeOf(transition)] : guidance.outcomes,
+        rejections: guidance.rejections + (rejection === null ? 0 : 1),
+      },
       // A decision is judged against what the operator believed when they made it; waiting is not.
-      ...(transition ? { transitionHypothesis: move.type === 'decide' ? get().hypothesis : null } : {}),
-      ...(transition && move.type === 'decide' ? { hypothesis: null } : {}),
+      ...(transition ? { transitionHypothesis: decided ? get().hypothesis : null, transitionObjective: decided ? get().objective : null } : {}),
+      ...(decided ? { hypothesis: null, objective: null } : {}),
+      ...(transition ? { hintOpen: false } : {}),
       ...extra,
     })
     return rejection === null
@@ -123,12 +168,44 @@ export const useIncidentStore = create<IncidentStore>((set, get) => {
 
   return {
     ...fresh(),
+    mode: 'guided',
 
     start: () => {
       play({ type: 'start' }, { phase: 'paged' })
     },
     acknowledgePage: () => set({ phase: 'running' }),
     setHypothesis: (hypothesis) => set({ hypothesis }),
+    setMode: (mode) => set({ mode }),
+    setObjective: (objective) => set({ objective }),
+
+    askHint: (stuck = false) => {
+      const { view, guidance, hint } = get()
+      const history = stuck ? { ...guidance, stuck: guidance.stuck + 1 } : guidance
+      const situation = situationOf(guidanceContext(view, history))
+      // A new situation starts again from the gentlest rung.
+      const level = hint && hint.situation === situation ? nextLevel(hint.level) : 2
+      const used = { ...history.used }
+      if (level === 2) used.hints += 1
+      else if (level === 3) used.strongHints += 1
+      else used.rescues += 1
+      set({ hint: { level, situation }, hintOpen: true, guidance: { ...history, used }, promptDismissedAt: history.outcomes.length })
+    },
+    closeHint: () => set({ hintOpen: false }),
+    dismissPrompt: () => set({ promptDismissedAt: get().guidance.outcomes.length }),
+    noteReasoningFlow: () => {
+      const { guidance } = get()
+      set({ guidance: { ...guidance, used: { ...guidance.used, reasoningFlows: guidance.used.reasoningFlows + 1 } } })
+    },
+    noteExplanation: (id) => {
+      const { guidance } = get()
+      set({
+        guidance: {
+          ...guidance,
+          explanationOpens: { ...guidance.explanationOpens, [id]: (guidance.explanationOpens[id] ?? 0) + 1 },
+          used: { ...guidance.used, explanations: guidance.used.explanations + 1 },
+        },
+      })
+    },
 
     select: (decisionId) => {
       const action = get().view.actions.find((candidate) => candidate.id === decisionId) ?? null
@@ -153,10 +230,12 @@ export const useIncidentStore = create<IncidentStore>((set, get) => {
     runAgain: () => set(fresh()),
 
     replayDecisions: () => {
-      const { moves, session } = get()
+      const { moves, session, guidance } = get()
       const next = new IncidentSession()
       set({
         ...fresh(),
+        // The help used belongs to the run being replayed; the postmortem still reports it.
+        guidance: { ...EMPTY_HISTORY, used: guidance.used },
         session: next,
         view: next.view(),
         phase: 'running',

@@ -1,10 +1,14 @@
 import { useState } from 'react'
-import { AlertTriangle, Clock, Layers, Search, Wallet } from 'lucide-react'
+import { AlertTriangle, Clock, Layers, Lightbulb, Search, Wallet } from 'lucide-react'
+import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 import { clock, signedUsd, usd } from '@/lib/incident/format'
 import type { ActionView, IncidentView } from '@/lib/incident/session'
 import { explainDecision, unknownNote } from '@/lib/incident/explain'
 import type { Hypothesis, HypothesisStatus } from '@/lib/incident/reasoning'
+import { MODES, type ModeConfig } from '@/lib/incident/guidance/modes'
+import { OBJECTIVES } from '@/lib/incident/guidance/objectives'
+import type { HintAction } from '@/lib/incident/guidance/hints'
 import type { StatedHypothesis } from '@/store/incidentStore'
 import { ExpectedDirection } from './ActionsPanel'
 import { Eyebrow, Modal } from './shared'
@@ -14,6 +18,14 @@ interface DecisionDialogProps {
   view: IncidentView
   causes: Hypothesis[]
   hypothesis: StatedHypothesis | null
+  mode?: ModeConfig
+  /** What the operator says they want to improve. Optional. */
+  objective?: string | null
+  onObjective?: (objective: string | null) => void
+  /** Guided mode: this decision targets something nobody has measured yet. */
+  nudge?: { text: string; check: HintAction } | null
+  /** Switch to another action's preview, e.g. the investigation the nudge suggests. */
+  onSwitch?: (actionId: string) => void
   onCancel: () => void
   onConfirm: (rationale: string) => void
 }
@@ -31,7 +43,8 @@ const EVIDENCE_WORD: Record<HypothesisStatus, string> = {
  * wrong, and asks why: the rationale is stored with the decision in the
  * engine's record and comes back in the postmortem.
  */
-export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onConfirm }: DecisionDialogProps) {
+export function DecisionDialog({ action, view, causes, hypothesis, mode = MODES.guided, objective = null, onObjective, nudge, onSwitch, onCancel, onConfirm }: DecisionDialogProps) {
+  const guides = mode.concepts
   const believed = hypothesis && hypothesis.id !== 'unsure' ? hypothesis : null
   const [rationale, setRationale] = useState(believed ? `I think the cause is ${believed.label.toLowerCase()}, because ` : '')
   const [tried, setTried] = useState(false)
@@ -55,12 +68,28 @@ export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onC
       }
     >
       <div className="space-y-4 px-5 py-4">
-        <div>
-          <Eyebrow>{investigate ? 'You are trying to learn' : 'You are trying to'}</Eyebrow>
-          <p className="mt-1 text-sm font-medium leading-relaxed text-fg">{explained.goal}</p>
-          {believed && <p className="mt-1 text-[12.5px] text-fg-muted">Your hypothesis: {believed.label.toLowerCase()}.</p>}
-        </div>
-        {!investigate && explained.improves && explained.improves.length > 0 && (
+        {nudge && (
+          <div className="rounded-md border border-warning/40 bg-warning/5 p-2.5 text-[13px] text-fg" data-testid="investigate-first">
+            <p className="flex gap-1.5">
+              <Lightbulb className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+              <span>{nudge.text}</span>
+            </p>
+            {onSwitch && (
+              <Button size="sm" className="mt-2" onClick={() => onSwitch(nudge.check.actionId)}>
+                <Search className="size-3.5 text-info" aria-hidden="true" />
+                {nudge.check.title} instead
+              </Button>
+            )}
+          </div>
+        )}
+        {guides && (
+          <div>
+            <Eyebrow>{investigate ? 'You are trying to learn' : 'You are trying to'}</Eyebrow>
+            <p className="mt-1 text-sm font-medium leading-relaxed text-fg">{explained.goal}</p>
+            {believed && <p className="mt-1 text-[12.5px] text-fg-muted">Your hypothesis: {believed.label.toLowerCase()}.</p>}
+          </div>
+        )}
+        {guides && !investigate && explained.improves && explained.improves.length > 0 && (
           <div className="grid gap-3 sm:grid-cols-2">
             <div>
               <Eyebrow>Expected direction</Eyebrow>
@@ -84,7 +113,7 @@ export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onC
             </div>
           </div>
         )}
-        {!investigate && explained.evidence.length > 0 && (
+        {guides && !investigate && explained.evidence.length > 0 && (
           <div data-testid="decision-evidence">
             <Eyebrow>What you can see about it</Eyebrow>
             <ul className="mt-1 space-y-1 text-[12.5px] leading-snug">
@@ -97,7 +126,7 @@ export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onC
             </ul>
           </div>
         )}
-        {investigate && unknowns.length > 0 && (
+        {guides && investigate && unknowns.length > 0 && (
           <div>
             <Eyebrow>Right now</Eyebrow>
             {unknowns.map((note) => (
@@ -149,11 +178,11 @@ export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onC
             {action.reveals.length > 0 && <p className="mt-1.5 text-xs text-fg-subtle">You will learn: {action.reveals.join(', ')}.</p>}
           </div>
         ) : (
-          action.risks.length + (explained.tradeoffs?.length ?? 0) > 0 && (
+          action.risks.length + (guides ? (explained.tradeoffs?.length ?? 0) : 0) > 0 && (
             <div>
               <Eyebrow>Potential risks and trade-offs</Eyebrow>
               <ul className="mt-1 space-y-1">
-                {[...action.risks, ...(explained.tradeoffs ?? [])].map((risk) => (
+                {[...action.risks, ...(guides ? (explained.tradeoffs ?? []) : [])].map((risk) => (
                   <li key={risk} className="flex gap-1.5 text-[13px] text-fg">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
                     {risk}
@@ -162,6 +191,30 @@ export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onC
               </ul>
             </div>
           )
+        )}
+        {onObjective && guides && (
+          <div>
+            <p id="objective" className="text-sm font-medium text-fg">
+              What are you trying to improve? <span className="text-xs font-normal text-fg-subtle">Optional</span>
+            </p>
+            <div role="radiogroup" aria-labelledby="objective" className="mt-1.5 flex flex-wrap gap-1.5">
+              {OBJECTIVES.map((option) => {
+                const checked = objective === option.id
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={checked}
+                    onClick={() => onObjective(checked ? null : option.id)}
+                    className={cn('rounded-full border px-2.5 py-1 text-[12px] transition-colors', checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent')}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
         )}
         <div>
           <label htmlFor="rationale" className="text-sm font-medium text-fg">

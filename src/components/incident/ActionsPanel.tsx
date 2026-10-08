@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { ArrowDown, ArrowUp, ChevronDown, FastForward, Hourglass } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
@@ -19,13 +19,17 @@ interface ActionsPanelProps {
   onHypothesis: (hypothesis: StatedHypothesis | null) => void
   /** Early on, every action shows what it is for; later that sits behind a toggle. */
   explain: boolean
+  /** What each action is for. Off in Expert mode: just the actions and their costs. */
+  guides?: boolean
+  /** Help on request, shown under the decision cue. */
+  guidance?: ReactNode
   onSelect: (id: string) => void
   onWait: (minutes: number) => void
   onFinish: () => void
 }
 
 /** The decision cue, then the actions grouped by what they try to accomplish. */
-export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis, explain, onSelect, onWait, onFinish }: ActionsPanelProps) {
+export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis, explain, guides = true, guidance, onSelect, onWait, onFinish }: ActionsPanelProps) {
   return (
     <section aria-labelledby="available-actions" className="rounded-lg border border-border bg-surface">
       {move && (
@@ -62,18 +66,20 @@ export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis,
           )}
         </div>
       )}
+      {guidance}
       <div className="p-3">
         <Eyebrow className="mb-2">
           <span id="available-actions">Available actions</span>
         </Eyebrow>
+        {guides && <p className="-mt-1 mb-2 text-[11.5px] text-fg-subtle">Investigations reduce uncertainty. Actions change the system.</p>}
         {groupActions(view.actions, view.scenarioId).map(({ group, actions }) => (
           <div key={group.id} className="mt-3 first-of-type:mt-0" role="group" aria-label={group.title}>
             <p className="mb-1.5 text-xs">
-              <span className="font-semibold text-fg">{group.title}</span> <span className="text-fg-subtle">{group.note}</span>
+              <span className="font-semibold text-fg">{group.title}</span> {guides && <span className="text-fg-subtle">{group.note}</span>}
             </p>
             <div className="space-y-1.5">
               {actions.map((action) => (
-                <ActionButton key={action.id} action={action} guide={decisionGuide(action, view.scenarioId)} explain={explain} onSelect={onSelect} />
+                <ActionButton key={action.id} action={action} guide={decisionGuide(action, view.scenarioId)} explain={explain} guides={guides} onSelect={onSelect} />
               ))}
             </div>
           </div>
@@ -101,9 +107,9 @@ export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis,
   )
 }
 
-function ActionButton({ action, guide, explain, onSelect }: { action: ActionView; guide: DecisionGuide; explain: boolean; onSelect: (id: string) => void }) {
+function ActionButton({ action, guide, explain, guides, onSelect }: { action: ActionView; guide: DecisionGuide; explain: boolean; guides: boolean; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false)
-  const details = (guide.helpsWhen?.length ?? 0) > 0 || (guide.mayNotHelpWhen?.length ?? 0) > 0 || (guide.tradeoffs?.length ?? 0) > 0 || (guide.improves?.length ?? 0) > 0
+  const details = guides && ((guide.helpsWhen?.length ?? 0) > 0 || (guide.mayNotHelpWhen?.length ?? 0) > 0 || (guide.tradeoffs?.length ?? 0) > 0 || (guide.improves?.length ?? 0) > 0)
   return (
     <div className={cn('rounded-md border', action.enabled ? 'border-border bg-surface-2' : 'border-dashed border-border opacity-70')}>
       <button
@@ -120,7 +126,7 @@ function ActionButton({ action, guide, explain, onSelect }: { action: ActionView
             {action.complexity !== 0 && <> · {action.complexity > 0 ? '+' : ''}{action.complexity} cx</>}
           </span>
         </span>
-        {(explain || action.kind === 'investigate') && <span className="mt-0.5 block text-[12px] leading-snug text-fg-muted">{guide.goal}</span>}
+        {guides && (explain || action.kind === 'investigate') && <span className="mt-0.5 block text-[12px] leading-snug text-fg-muted">{guide.goal}</span>}
         {!action.enabled && action.reason && <span className="mt-0.5 block text-xs text-warning">Unavailable: {action.reason}</span>}
         {action.timesTaken > 0 && action.enabled && <span className="mt-0.5 block text-[11px] text-fg-subtle">Done {action.timesTaken}× already</span>}
       </button>

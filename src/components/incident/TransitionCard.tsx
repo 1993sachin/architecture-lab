@@ -1,11 +1,13 @@
 import { m } from 'framer-motion'
-import { AlertTriangle, ArrowRight, ChevronRight, CornerDownRight, Lightbulb, Target, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, Brain, ChevronRight, CornerDownRight, Lightbulb, Target, Zap } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 import { clock, metricValue } from '@/lib/incident/format'
 import { interpretFact } from '@/lib/incident/explain'
 import { explainConsequence, type HypothesisStatus } from '@/lib/incident/reasoning'
 import type { MetricDelta, Transition } from '@/lib/incident/session'
+import type { Clue } from '@/lib/incident/guidance/clues'
+import type { ObjectiveResult } from '@/lib/incident/guidance/objectives'
 import type { StatedHypothesis } from '@/store/incidentStore'
 import { Eyebrow } from './shared'
 
@@ -22,9 +24,25 @@ const STATUS_WORD: Record<HypothesisStatus, string> = {
  * changed, why it changed, and what to watch now. The full detail (every
  * delta, how the picture of causes moved) is one click away.
  */
-export function TransitionCard({ transition, hypothesis, onPostmortem }: { transition: Transition; hypothesis?: StatedHypothesis | null; onPostmortem?: () => void }) {
+interface TransitionCardProps {
+  transition: Transition
+  hypothesis?: StatedHypothesis | null
+  /** "Why?" lines, risks and the hypothesis check. Expert mode shows only what changed. */
+  why?: boolean
+  /** How the move did against what the operator said they wanted. */
+  objective?: ObjectiveResult | null
+  /** After a move that didn't go as hoped: what it reveals, as a question. */
+  clue?: Clue | null
+  onPostmortem?: () => void
+}
+
+const OBJECTIVE_TONE: Record<ObjectiveResult['verdict'], string> = { better: 'text-healthy', worse: 'text-failed', unclear: 'text-fg-muted' }
+const OBJECTIVE_WORD: Record<ObjectiveResult['verdict'], string> = { better: 'moved the way you wanted', worse: 'moved the other way', unclear: 'no clear change' }
+
+export function TransitionCard({ transition, hypothesis, why = true, objective, clue, onPostmortem }: TransitionCardProps) {
   const { decision } = transition
-  const explained = explainConsequence(transition, hypothesis)
+  const full = explainConsequence(transition, hypothesis)
+  const explained = why ? full : { ...full, why: [], meanwhile: [], newRisk: undefined, hypothesis: undefined, changes: [] }
   const minutes = transition.to - transition.from
   const investigation = decision?.kind === 'investigate'
   const headline = decision
@@ -78,6 +96,12 @@ export function TransitionCard({ transition, hypothesis, onPostmortem }: { trans
         </p>
       )}
       {decision && <p className="mt-0.5 line-clamp-2 text-xs text-fg-subtle italic">“{decision.rationale}”</p>}
+      {objective && (
+        <p className="mt-1 text-[12.5px]" data-testid="objective-result">
+          <span className="text-fg">You wanted to: {lowerFirst(objective.label)}.</span>{' '}
+          <span className={cn('font-medium', OBJECTIVE_TONE[objective.verdict])}>{OBJECTIVE_WORD[objective.verdict]}:</span> <span className="text-fg-muted">{objective.text}</span>
+        </p>
+      )}
 
       {transition.revealed.length > 0 && (
         <div className="mt-2.5 rounded-md border border-info/40 bg-info/5 p-2.5" data-testid="new-information">
@@ -140,6 +164,17 @@ export function TransitionCard({ transition, hypothesis, onPostmortem }: { trans
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {clue && (
+        <div className="mt-2.5 rounded-md border border-accent/40 bg-accent-soft p-2.5 text-[13px]" data-testid="new-clue">
+          <Eyebrow className="flex items-center gap-1 text-accent">
+            <Brain className="size-3" aria-hidden="true" />
+            New clue
+          </Eyebrow>
+          <p className="mt-0.5 text-fg">{clue.text}</p>
+          <p className="mt-0.5 font-semibold text-fg">{clue.question}</p>
         </div>
       )}
 
