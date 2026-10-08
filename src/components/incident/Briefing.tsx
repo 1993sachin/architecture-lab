@@ -1,4 +1,4 @@
-import { Clock, EyeOff, Scale, Search, Siren, Target, Wallet } from 'lucide-react'
+import { Clock, EyeOff, Info, Scale, Search, Siren, Target, Wallet } from 'lucide-react'
 import type { Scenario } from '@architecture-lab/engine'
 import { Button } from '@/components/ui/Button'
 import { clock, usd } from '@/lib/incident/format'
@@ -16,6 +16,8 @@ const OBJECTIVE_NAME: Record<string, string> = {
   recovered: 'End the incident healthy',
   'database-headroom': 'Leave the database some headroom',
 }
+
+const HOW = ['Understand what is happening.', 'Investigate what you don’t know.', 'Make a decision.', 'Watch what happens.', 'Adapt.']
 
 /**
  * The first screen. Four lines set up the role before anything is on fire,
@@ -46,7 +48,35 @@ export function Briefing({ scenario, view, onStart }: { scenario: Scenario; view
       </div>
       <p className="mt-3 text-[13px] text-fg-muted">Your system: users → API gateway → application cluster → one PostgreSQL database.</p>
 
-      <section aria-labelledby="success" className="mt-7 rounded-lg border border-border bg-surface p-4 sm:p-5">
+      <section aria-labelledby="how-this-works" className="mt-6 rounded-lg border border-accent/40 bg-accent-soft p-4 sm:p-5">
+        <h2 id="how-this-works" className="font-mono text-[11px] font-medium tracking-wide text-accent uppercase">
+          How this works
+        </h2>
+        <p className="mt-2 text-sm text-fg">
+          Something is going wrong. Your job isn’t to find the perfect answer. Your job is to:
+        </p>
+        <ol className="mt-2 grid gap-1.5 text-sm text-fg sm:grid-cols-5" aria-label="How this works">
+          {HOW.map((step, index) => (
+            <li key={step} className="flex gap-2 sm:flex-col sm:gap-0.5">
+              <span className="font-mono text-xs font-semibold text-accent">{index + 1}</span>
+              <span>{step}</span>
+            </li>
+          ))}
+        </ol>
+        <p className="mt-3 flex items-center gap-1 text-[12.5px] text-fg-muted">
+          Don’t know a term like p99 or throttling? Click any number, or an <Info className="inline size-3.5" aria-label="info" /> icon, to see what it means.
+        </p>
+      </section>
+
+      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <Button variant="primary" size="lg" onClick={onStart}>
+          <Siren className="size-4" aria-hidden="true" />
+          Start the incident
+        </Button>
+        <p className="text-xs text-fg-subtle">Your shift starts quiet. You will be paged within minutes; from then on, every move you make takes time.</p>
+      </div>
+
+      <section aria-labelledby="success" className="mt-8 rounded-lg border border-border bg-surface p-4 sm:p-5">
         <h2 id="success" className="flex items-center gap-2 text-sm font-semibold text-fg">
           <Target className="size-4 text-accent" aria-hidden="true" />
           What success looks like
@@ -72,14 +102,6 @@ export function Briefing({ scenario, view, onStart }: { scenario: Scenario; view
           {complexity && 'limit' in complexity && <li className="rounded border border-border bg-surface-2 px-2 py-1 text-fg">complexity ≤ {complexity.limit}</li>}
         </ul>
       </section>
-
-      <div className="mt-7 flex flex-wrap items-center gap-x-4 gap-y-2">
-        <Button variant="primary" size="lg" onClick={onStart}>
-          <Siren className="size-4" aria-hidden="true" />
-          Start the incident
-        </Button>
-        <p className="text-xs text-fg-subtle">Your shift starts quiet. You will be paged within minutes; from then on, every move you make takes time.</p>
-      </div>
 
       <section aria-labelledby="good-to-know" className="mt-10">
         <h2 id="good-to-know" className="text-sm font-semibold text-fg">

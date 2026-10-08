@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { FastForward, Repeat, StepForward, X } from 'lucide-react'
 import { useDocumentTitle } from '@/hooks/useDocumentTitle'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
@@ -15,7 +16,7 @@ import { SituationPanel } from '@/components/incident/SituationPanel'
 import { IncidentImpact } from '@/components/incident/StatusPanels'
 import { TopologyView } from '@/components/incident/TopologyView'
 import { TransitionCard } from '@/components/incident/TransitionCard'
-import { explainSymptom, hypotheses, situation, stage, yourMove } from '@/lib/incident/reasoning'
+import { explainSymptom, hypotheses, hypothesisOptions, situation, stage, yourMove } from '@/lib/incident/reasoning'
 import { useIncidentStore } from '@/store/incidentStore'
 
 /**
@@ -28,7 +29,11 @@ export default function IncidentRunner() {
   const store = useIncidentStore()
   // On narrow screens the actions sit right under the impact, not below everything else.
   const wide = useMediaQuery('(min-width: 1024px)')
-  const { session, phase, view, transition, pending, constraintAlert, rejection, replay } = store
+  const { session, phase, view, transition, pending, constraintAlert, rejection, replay, hypothesis, transitionHypothesis } = store
+  // Each phase (briefing, incident, postmortem) is a new screen: start it at the top.
+  useEffect(() => {
+    document.documentElement.scrollTop = 0
+  }, [phase])
 
   if (phase === 'briefing') {
     return (
@@ -50,9 +55,21 @@ export default function IncidentRunner() {
   const causes = hypotheses(view)
   const when = stage(view)
   const live = !replay && !view.complete
+  const breached = view.slos.some((slo) => slo.breached)
   const actions = live ? (
-    <ActionsPanel view={view} move={yourMove(view, causes)} explain={when === 'early'} onSelect={store.select} onWait={store.wait} onFinish={store.finish} />
+    <ActionsPanel
+      view={view}
+      move={yourMove(view, causes)}
+      hypotheses={breached ? hypothesisOptions(causes) : []}
+      hypothesis={hypothesis}
+      onHypothesis={store.setHypothesis}
+      explain={when === 'early'}
+      onSelect={store.select}
+      onWait={store.wait}
+      onFinish={store.finish}
+    />
   ) : null
+  const check = live ? store.select : undefined
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
@@ -68,14 +85,15 @@ export default function IncidentRunner() {
           </button>
         </div>
       )}
-      {transition && phase === 'running' && <TransitionCard transition={transition} onPostmortem={replay ? undefined : store.openPostmortem} />}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">
-          <IncidentImpact view={view} />
+          {/* In the main column, so the decision panel beside it stays at the top of the screen. */}
+          {transition && phase === 'running' && <TransitionCard transition={transition} hypothesis={transitionHypothesis} onPostmortem={replay ? undefined : store.openPostmortem} />}
+          <IncidentImpact view={view} causes={causes} onCheck={check} />
           <SituationPanel lines={situation(view, causes)} why={explainSymptom(view, causes)} expanded={when === 'early'} />
           <div className="grid gap-4 md:grid-cols-2">
-            <KnowledgePanel view={view} onInvestigate={live ? store.select : undefined} />
-            <CausesPanel causes={causes} onCheck={live ? store.select : undefined} compact={when === 'late'} />
+            <KnowledgePanel view={view} causes={causes} onInvestigate={check} />
+            <CausesPanel causes={causes} onCheck={check} compact={when === 'late'} />
           </div>
           {!wide && actions}
           <div className="grid gap-4 md:grid-cols-2">
@@ -96,7 +114,7 @@ export default function IncidentRunner() {
         </div>
       </div>
       {phase === 'paged' && <PageAlert view={view} transition={transition} onAcknowledge={store.acknowledgePage} />}
-      {pending && <DecisionDialog key={pending.id} action={pending} view={view} onCancel={store.cancel} onConfirm={store.confirm} />}
+      {pending && <DecisionDialog key={pending.id} action={pending} view={view} causes={causes} hypothesis={hypothesis} onCancel={store.cancel} onConfirm={store.confirm} />}
       {constraintAlert && phase === 'running' && !pending && <ConstraintAlert change={constraintAlert} view={view} onDismiss={store.dismissConstraint} />}
     </div>
   )

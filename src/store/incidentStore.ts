@@ -17,6 +17,11 @@ export type Move =
   | { type: 'wait'; minutes: number }
   | { type: 'finish' }
 
+export interface StatedHypothesis {
+  id: string
+  label: string
+}
+
 export type Phase = 'briefing' | 'paged' | 'running' | 'postmortem'
 
 interface ReplayState {
@@ -42,7 +47,12 @@ interface IncidentStore {
   rejection: string | null
   moves: Move[]
   replay: ReplayState | null
+  /** What the operator says they think is going on. Never sent to the engine; it only frames their own reasoning. */
+  hypothesis: StatedHypothesis | null
+  /** The hypothesis they held when they made the move shown in `transition`. */
+  transitionHypothesis: StatedHypothesis | null
 
+  setHypothesis: (hypothesis: StatedHypothesis | null) => void
   start: () => void
   acknowledgePage: () => void
   select: (decisionId: string) => void
@@ -71,6 +81,8 @@ function fresh() {
     rejection: null,
     moves: [] as Move[],
     replay: null,
+    hypothesis: null,
+    transitionHypothesis: null,
   }
 }
 
@@ -101,6 +113,9 @@ export const useIncidentStore = create<IncidentStore>((set, get) => {
       transition: transition ?? get().transition,
       constraintAlert: transition?.constraintChanges[0] ?? null,
       rejection,
+      // A decision is judged against what the operator believed when they made it; waiting is not.
+      ...(transition ? { transitionHypothesis: move.type === 'decide' ? get().hypothesis : null } : {}),
+      ...(transition && move.type === 'decide' ? { hypothesis: null } : {}),
       ...extra,
     })
     return rejection === null
@@ -113,6 +128,7 @@ export const useIncidentStore = create<IncidentStore>((set, get) => {
       play({ type: 'start' }, { phase: 'paged' })
     },
     acknowledgePage: () => set({ phase: 'running' }),
+    setHypothesis: (hypothesis) => set({ hypothesis }),
 
     select: (decisionId) => {
       const action = get().view.actions.find((candidate) => candidate.id === decisionId) ?? null

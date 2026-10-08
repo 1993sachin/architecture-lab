@@ -1,6 +1,7 @@
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import type { Hypothesis, HypothesisStatus } from '@/lib/incident/reasoning'
+import { LearnConcept } from './Learn'
 import { Eyebrow } from './shared'
 
 const STATUS: Record<HypothesisStatus, { label: string; className: string }> = {
@@ -21,8 +22,9 @@ export function CausesPanel({ causes, onCheck, compact }: { causes: Hypothesis[]
   const open = causes.some((cause) => cause.status === 'unknown')
   return (
     <section aria-labelledby="possible-causes" className="rounded-lg border border-border bg-surface p-4">
-      <Eyebrow className="mb-2 text-fg">
+      <Eyebrow className="mb-2 flex items-center gap-1 text-fg">
         <span id="possible-causes">What might be causing it?</span>
+        <LearnConcept id="bottleneck" />
       </Eyebrow>
       <ul className="space-y-2.5" aria-label="Possible causes">
         {shown.map((cause) => (

@@ -3,15 +3,27 @@ import { AlertTriangle, Clock, Layers, Search, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clock, signedUsd, usd } from '@/lib/incident/format'
 import type { ActionView, IncidentView } from '@/lib/incident/session'
-import { intentOf } from '@/lib/incident/intents'
-import { IntentDetails } from './ActionsPanel'
+import { explainDecision, unknownNote } from '@/lib/incident/explain'
+import type { Hypothesis, HypothesisStatus } from '@/lib/incident/reasoning'
+import type { StatedHypothesis } from '@/store/incidentStore'
+import { ExpectedDirection } from './ActionsPanel'
 import { Eyebrow, Modal } from './shared'
 
 interface DecisionDialogProps {
   action: ActionView
   view: IncidentView
+  causes: Hypothesis[]
+  hypothesis: StatedHypothesis | null
   onCancel: () => void
   onConfirm: (rationale: string) => void
+}
+
+const EVIDENCE_WORD: Record<HypothesisStatus, string> = {
+  likely: 'Evidence suggests',
+  active: 'Happening',
+  possible: 'Could be',
+  unknown: 'You don’t know yet',
+  unlikely: 'Evidence points away',
 }
 
 /**
@@ -19,12 +31,14 @@ interface DecisionDialogProps {
  * wrong, and asks why: the rationale is stored with the decision in the
  * engine's record and comes back in the postmortem.
  */
-export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDialogProps) {
-  const [rationale, setRationale] = useState('')
+export function DecisionDialog({ action, view, causes, hypothesis, onCancel, onConfirm }: DecisionDialogProps) {
+  const believed = hypothesis && hypothesis.id !== 'unsure' ? hypothesis : null
+  const [rationale, setRationale] = useState(believed ? `I think the cause is ${believed.label.toLowerCase()}, because ` : '')
   const [tried, setTried] = useState(false)
   const missing = rationale.trim() === ''
   const investigate = action.kind === 'investigate'
-  const intent = intentOf(action)
+  const explained = explainDecision(action, view, causes)
+  const unknowns = [...new Set(view.unknown.filter((fact) => fact.revealedBy.includes(action.title)).map((fact) => unknownNote(fact.id, view)).filter((note): note is string => note !== null))]
   const cost = view.budget.monthlyCost + action.monthlyCost
   const submit = () => {
     setTried(true)
@@ -35,20 +49,67 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
       onClose={onCancel}
       title={
         <div className="border-b border-border px-5 pt-4 pb-3">
-          <Eyebrow>{investigate ? 'Investigate' : 'Decision'} at {clock(view.time)}</Eyebrow>
+          <Eyebrow>You are about to · {clock(view.time)}</Eyebrow>
           <h2 className="mt-1 text-lg font-semibold tracking-tight text-fg">{action.title}</h2>
         </div>
       }
     >
       <div className="space-y-4 px-5 py-4">
         <div>
-          <Eyebrow>{investigate ? 'What you are trying to learn' : 'What it tries to solve'}</Eyebrow>
-          <p className="mt-1 text-sm font-medium leading-relaxed text-fg">{intent.purpose}</p>
-          {!investigate && <IntentDetails action={action} className="mt-1 px-0 pb-0" />}
+          <Eyebrow>{investigate ? 'You are trying to learn' : 'You are trying to'}</Eyebrow>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-fg">{explained.goal}</p>
+          {believed && <p className="mt-1 text-[12.5px] text-fg-muted">Your hypothesis: {believed.label.toLowerCase()}.</p>}
         </div>
+        {!investigate && explained.improves && explained.improves.length > 0 && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Eyebrow>Expected direction</Eyebrow>
+              <div className="mt-1 text-[13px]">
+                <ExpectedDirection guide={explained} />
+              </div>
+            </div>
+            <div className="space-y-2 text-[12.5px] leading-snug">
+              {explained.helpsWhen?.map((line) => (
+                <p key={line}>
+                  <span className="font-medium text-healthy">Helps when: </span>
+                  <span className="text-fg-muted">{line}</span>
+                </p>
+              ))}
+              {explained.mayNotHelpWhen?.map((line) => (
+                <p key={line}>
+                  <span className="font-medium text-warning">May not solve: </span>
+                  <span className="text-fg-muted">{line}</span>
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+        {!investigate && explained.evidence.length > 0 && (
+          <div data-testid="decision-evidence">
+            <Eyebrow>What you can see about it</Eyebrow>
+            <ul className="mt-1 space-y-1 text-[12.5px] leading-snug">
+              {explained.evidence.map((item) => (
+                <li key={item.label}>
+                  <span className="font-medium text-fg">{item.label}</span> <span className="font-mono text-[10px] text-fg-subtle uppercase">{EVIDENCE_WORD[item.status]}</span>
+                  <span className="block text-fg-muted">{item.text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {investigate && unknowns.length > 0 && (
+          <div>
+            <Eyebrow>Right now</Eyebrow>
+            {unknowns.map((note) => (
+              <p key={note} className="mt-1 text-[13px] leading-relaxed text-fg-muted">
+                {note}
+              </p>
+            ))}
+          </div>
+        )}
         <div>
-          <Eyebrow>Expected effect</Eyebrow>
-          <p className="mt-1 text-sm leading-relaxed text-fg">{action.description}</p>
+          <Eyebrow>What happens</Eyebrow>
+          <p className="mt-1 text-[13px] leading-relaxed text-fg-muted">{action.description}</p>
         </div>
         <dl className="grid grid-cols-3 gap-2 text-sm">
           <Fact icon={Clock} label="Takes">
@@ -88,11 +149,11 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
             {action.reveals.length > 0 && <p className="mt-1.5 text-xs text-fg-subtle">You will learn: {action.reveals.join(', ')}.</p>}
           </div>
         ) : (
-          action.risks.length > 0 && (
+          action.risks.length + (explained.tradeoffs?.length ?? 0) > 0 && (
             <div>
-              <Eyebrow>Potential risks</Eyebrow>
+              <Eyebrow>Potential risks and trade-offs</Eyebrow>
               <ul className="mt-1 space-y-1">
-                {action.risks.map((risk) => (
+                {[...action.risks, ...(explained.tradeoffs ?? [])].map((risk) => (
                   <li key={risk} className="flex gap-1.5 text-[13px] text-fg">
                     <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
                     {risk}
@@ -111,6 +172,8 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
             id="rationale"
             value={rationale}
             onChange={(event) => setRationale(event.target.value)}
+            // A prefilled sentence is meant to be finished, so typing starts at its end.
+            onFocus={(event) => event.currentTarget.setSelectionRange(event.currentTarget.value.length, event.currentTarget.value.length)}
             rows={3}
             aria-invalid={tried && missing}
             aria-describedby={tried && missing ? 'rationale-error' : undefined}
