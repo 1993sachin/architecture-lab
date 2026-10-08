@@ -63,7 +63,7 @@ export function MetricTile({ metric }: { metric: MetricView }) {
     >
       <span className="flex items-center justify-between gap-1 text-[11px] text-fg-subtle">
         <span className="truncate">{metric.label}</span>
-        <Info className="size-3 shrink-0 opacity-60 group-hover:text-accent group-hover:opacity-100" aria-hidden="true" />
+        <Info className="size-3 shrink-0 opacity-60 group-data-[learn=off]:hidden group-hover:text-accent group-hover:opacity-100" aria-hidden="true" />
       </span>
       {unknown ? (
         <>

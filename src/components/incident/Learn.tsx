@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
 import { ArrowDown, ArrowRight, Info, Search } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Explainable } from '@/components/ui/Popover'
@@ -12,6 +12,12 @@ import type { IncidentView, MetricKey } from '@/lib/incident/session'
  * metric or a concept, next to the number it explains. Nothing is shown until
  * the operator asks.
  */
+
+/**
+ * Whether explanations are offered (Expert mode turns them off) and who hears
+ * that one was opened. Provided once by the runner.
+ */
+export const LearningContext = createContext<{ enabled: boolean; onOpen?: (id: string) => void }>({ enabled: true })
 
 const READING_TONE: Record<Reading['tone'], string> = {
   concern: 'border-failed/40 bg-failed/5',
@@ -221,8 +227,11 @@ export function LearnMetric({
   className?: string
   children?: ReactNode
 }) {
+  const learning = useContext(LearningContext)
   const metric = view.metrics[metricKey]
   const concept = explainMetric(metricKey, view, causes).concept
+  // Explanations off: the content stays, without the trigger (and without its info icon).
+  if (!learning.enabled) return children ? <span className={className} data-learn="off">{children}</span> : null
   const title = metricKey === 'dbCpu' || metricKey === 'appCpu' ? `${metric.label}: ${concept.title.toLowerCase()}` : concept.title
   return (
     <Explainable
@@ -230,6 +239,7 @@ export function LearnMetric({
       title={title}
       hint={concept.short}
       className={className ?? 'rounded p-0.5 text-fg-subtle hover:text-accent'}
+      onOpen={() => learning.onOpen?.(metricKey)}
       content={() => <MetricBody metricKey={metricKey} view={view} causes={causes} onCheck={onCheck} />}
     >
       {children ?? <Info className="size-3.5" aria-hidden="true" />}
@@ -239,13 +249,16 @@ export function LearnMetric({
 
 /** An info icon for a concept that is not one live metric. */
 export function LearnConcept({ id, className, children, body }: { id: ConceptId; className?: string; children?: ReactNode; body?: ReactNode }) {
+  const learning = useContext(LearningContext)
   const concept = conceptOf(id)
+  if (!learning.enabled) return children ? <span className={className}>{children}</span> : null
   return (
     <Explainable
       label={`Explain ${concept.title}`}
       title={concept.title}
       hint={concept.short}
       className={className ?? 'rounded p-0.5 text-fg-subtle hover:text-accent'}
+      onOpen={() => learning.onOpen?.(id)}
       content={() => <ConceptBody concept={concept}>{body}</ConceptBody>}
     >
       {children ?? <Info className="size-3.5" aria-hidden="true" />}
