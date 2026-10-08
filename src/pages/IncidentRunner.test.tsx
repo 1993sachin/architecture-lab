@@ -19,7 +19,7 @@ function setup() {
 type User = ReturnType<typeof userEvent.setup>
 
 async function takeIncident(user: User) {
-  await user.click(screen.getByRole('button', { name: 'Start your shift' }))
+  await user.click(screen.getByRole('button', { name: 'Start the incident' }))
   await user.click(screen.getByRole('button', { name: 'Acknowledge and take the incident' }))
 }
 
@@ -43,15 +43,23 @@ beforeEach(() => {
 describe('Incident Runner', () => {
   it('opens on a briefing that sets up the role, then pages the operator', async () => {
     const user = setup()
-    expect(screen.getByText('You are on call')).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1, name: 'You’re on call.' })).toBeTruthy()
     expect(screen.getByText('You cannot see everything')).toBeTruthy()
     expect(screen.getByText('There is no single right answer')).toBeTruthy()
-    await user.click(screen.getByRole('button', { name: 'Start your shift' }))
+    // What success is measured against, before anything starts.
+    const objectives = within(screen.getByRole('list', { name: 'Objectives' })).getAllByRole('listitem')
+    expect(objectives).toHaveLength(useIncidentStore.getState().session.scenario.objectives.length)
+    expect(screen.getByText('Keep users served')).toBeTruthy()
+    expect(within(screen.getByRole('list', { name: 'Limits' })).getByText('budget ≤ $3,500/mo')).toBeTruthy()
+    await user.click(screen.getByRole('button', { name: 'Start the incident' }))
     const page = screen.getByRole('dialog', { name: 'You have been paged' })
     expect(within(page).getByText(/SLO breached/)).toBeTruthy()
     expect(within(page).getByText(/Launch goes viral/)).toBeTruthy()
     await user.click(within(page).getByRole('button', { name: 'Acknowledge and take the incident' }))
     expect(screen.queryByRole('dialog')).toBeNull()
+    // The jump from the briefing to the page reads as the shift starting, not as a choice to wait.
+    expect(screen.getByTestId('transition').textContent).toMatch(/3 minutes into your shift, you got paged\./)
+    expect(screen.getByTestId('transition').textContent).not.toMatch(/You held and watched/)
   })
 
   it('shows the initial incident state: clock, status, budget and impact', async () => {
@@ -218,7 +226,7 @@ describe('Incident Runner', () => {
     expect(screen.getByTestId('replay-verdict').textContent).toMatch(/Identical result/)
     await user.click(screen.getByRole('button', { name: 'Back to the postmortem' }))
     await user.click(screen.getByRole('button', { name: 'Run again' }))
-    expect(screen.getByRole('button', { name: 'Start your shift' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Start the incident' })).toBeTruthy()
   })
 
   it('produces the same engine result for the same sequence of UI decisions', async () => {

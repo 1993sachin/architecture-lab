@@ -179,6 +179,8 @@ export interface Transition {
   complete: boolean
   /** For a wait: the minutes asked for (it can stop early). */
   requested?: number
+  /** The opening transition: the shift began and ran until the operator was paged. */
+  start?: true
 }
 
 export type DecideResult = { status: 'applied'; transition: Transition } | { status: 'rejected'; reason: string }
@@ -260,9 +262,10 @@ export class IncidentSession {
 
   /** Lets time run until an SLO is first breached: the moment the operator is paged. */
   startIncident(limit = this.scenario.completion.maxDuration): Transition {
-    return this.#transition(null, () => {
+    const transition = this.#transition(null, () => {
       while (!this.#sim.isComplete() && this.#sim.getTime() < limit && currentBreaches(this.#sim).length === 0) this.#sim.advance(1)
     })
+    return { ...transition, start: true }
   }
 
   /**

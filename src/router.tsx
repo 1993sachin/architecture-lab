@@ -1,11 +1,11 @@
 import { lazy } from 'react'
-import { createHashRouter } from 'react-router-dom'
+import { Navigate, createHashRouter } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
 import { RouteError } from '@/pages/RouteError'
 
 // Every page is its own chunk; heavy experiments (React Flow) never load on the landing page.
 const Home = lazy(() => import('@/pages/Home'))
-const Experiments = lazy(() => import('@/pages/Experiments'))
+const Playground = lazy(() => import('@/pages/Playground'))
 const MicrofrontendPlayground = lazy(() => import('@/pages/MicrofrontendPlayground'))
 const ResiliencePlayground = lazy(() => import('@/pages/ResiliencePlayground'))
 const ArchitectureSimulator = lazy(() => import('@/pages/ArchitectureSimulator'))
@@ -27,11 +27,15 @@ export const router = createHashRouter([
     errorElement: <RouteError />,
     children: [
       { index: true, element: <Home /> },
-      { path: 'experiments', element: <Experiments /> },
+      { path: 'playground', element: <Playground /> },
+      // The Experiments index became the Playground; old links still land there.
+      { path: 'experiments', element: <Navigate to="/playground" replace /> },
       { path: 'experiments/microfrontend', element: <MicrofrontendPlayground /> },
       { path: 'experiments/resilience', element: <ResiliencePlayground /> },
       { path: 'simulator', element: <ArchitectureSimulator /> },
       { path: 'incident', element: <IncidentRunner /> },
+      // Reserved for a scenario list; with one scenario it opens the incident directly.
+      { path: 'incidents', element: <Navigate to="/incident" replace /> },
       { path: 'notebook', element: <Notebook /> },
       { path: 'notebook/:slug', element: <Article /> },
       { path: 'adrs', element: <ADRs /> },

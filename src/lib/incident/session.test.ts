@@ -28,6 +28,8 @@ describe('IncidentSession', () => {
     const transition = session.startIncident()
     expect(transition.from).toBe(0)
     expect(transition.to).toBe(3)
+    expect(transition.start).toBe(true)
+    expect(session.wait(1).start).toBeUndefined()
     expect(transition.events.map((event) => event.eventId)).toContain('launch-goes-viral')
     expect(session.view().status).toBe('active')
     expect(session.view().sloBreaches.length).toBeGreaterThan(0)
