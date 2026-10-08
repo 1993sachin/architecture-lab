@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { percent } from './format'
-import { groupActions, intentOf } from './intents'
-import { explainSymptom, explainTransition, hypotheses, situation, stage, yourMove } from './reasoning'
+import { decisionGuide, groupActions } from './explain'
+import { explainConsequence, explainSymptom, hypotheses, situation, stage, yourMove } from './reasoning'
 import { IncidentSession, type IncidentView, type Transition } from './session'
 
 function paged() {
@@ -23,7 +23,7 @@ function allText(view: IncidentView): string {
   return [
     ...situation(view),
     ...hypotheses(view).map((cause) => `${cause.label} ${cause.evidence}`),
-    ...(why ? [why.title, ...why.lines, ...why.associated, ...why.chain.map((step) => `${step.label} ${step.value}`)] : []),
+    ...(why ? [why.title, ...why.lines, ...why.associated, ...why.chains.flatMap((chain) => chain.steps.map((step) => `${step.label} ${step.value ?? ''}`))] : []),
     move ? `${move.framing} ${move.question}` : '',
   ].join('\n')
 }
@@ -56,13 +56,13 @@ describe('incident reasoning', () => {
     const session = paged()
     const transition = applied(session, 'investigate-database')
     expect(hypotheses(session.view()).find((cause) => cause.id === 'database')?.status).toBe('likely')
-    expect(explainTransition(transition).changes).toContainEqual(expect.objectContaining({ id: 'database', from: 'unknown', to: 'likely' }))
+    expect(explainConsequence(transition).changes).toContainEqual(expect.objectContaining({ id: 'database', from: 'unknown', to: 'likely' }))
   })
 
   it('shows that fixing one bottleneck can expose another', () => {
     const session = paged()
     applied(session, 'investigate-database')
-    const explained = explainTransition(applied(session, 'scale-application'))
+    const explained = explainConsequence(applied(session, 'scale-application'))
     expect(explained.improved.map((delta) => delta.key)).toContain('appCpu')
     expect(explained.worsened.map((delta) => delta.key)).toContain('dbCpu')
     expect(explained.why.join(' ')).toMatch(/Fixing one bottleneck can expose another/)
@@ -71,13 +71,13 @@ describe('incident reasoning', () => {
 
   it('explains a change it cannot measure without pretending to', () => {
     const session = paged()
-    const explained = explainTransition(applied(session, 'enable-cache'))
+    const explained = explainConsequence(applied(session, 'enable-cache'))
     expect(explained.why.join(' ')).toMatch(/PostgreSQL load is unknown, so watch errors and latency/)
   })
 
   it('treats rate limiting as a known, self-inflicted part of the availability loss', () => {
     const session = paged()
-    const explained = explainTransition(applied(session, 'enable-rate-limiting'))
+    const explained = explainConsequence(applied(session, 'enable-rate-limiting'))
     session.wait(3)
     const view = session.view()
     expect(hypotheses(view).find((cause) => cause.id === 'throttling')?.status).toBe('active')
@@ -106,8 +106,8 @@ describe('incident reasoning', () => {
 
   it('groups every action in the scenario by intent', () => {
     const decisions = new IncidentSession().scenario.decisions
-    for (const decision of decisions) expect(intentOf({ id: decision.id, kind: 'change', description: '' }).purpose).not.toBe('')
-    const groups = groupActions(paged().view().actions).map((entry) => entry.group.id)
+    for (const decision of decisions) expect(decisionGuide({ id: decision.id, kind: 'change', description: '' }, '10x-traffic-incident').goal).not.toBe('')
+    const groups = groupActions(paged().view().actions, '10x-traffic-incident').map((entry) => entry.group.id)
     expect(groups.slice(0, 2)).toEqual(['investigate', 'capacity'])
   })
 })

@@ -2,6 +2,7 @@ import { Clock, Wallet, Layers } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { clock, usd } from '@/lib/incident/format'
 import type { IncidentView, TimelineEntry } from '@/lib/incident/session'
+import { LearnConcept } from './Learn'
 
 const STATUS: Record<IncidentView['status'], { label: string; className: string }> = {
   quiet: { label: 'MONITORING', className: 'border-border bg-surface-2 text-fg-muted' },
@@ -41,6 +42,7 @@ export function IncidentHeader({ title, view }: { title: string; view: IncidentV
               {budget.over ? `${usd(-budget.headroom)} over` : `${usd(budget.headroom)} left`}
             </span>
           )}
+          <LearnConcept id="monthly-cost" />
         </div>
         <div className="flex items-center gap-2 text-sm" title="How much the on-call team can safely operate">
           <Layers className="size-4 text-fg-subtle" aria-hidden="true" />
@@ -49,6 +51,7 @@ export function IncidentHeader({ title, view }: { title: string; view: IncidentV
             {complexity.score}
             {complexity.limit !== null && ` / ${complexity.limit}`}
           </span>
+          <LearnConcept id="complexity" />
         </div>
       </div>
       <TimeRuler view={view} />

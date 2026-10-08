@@ -25,7 +25,7 @@ import {
   type SimulationAction,
   type SystemState,
 } from '@architecture-lab/engine'
-import { clock, usd } from './format'
+import { clock, metricValue, ms, percent, usd } from './format'
 
 /** The one scenario this UI runs. Created once; scenarios are frozen and shareable. */
 export const SCENARIO: Scenario = createScenario(trafficIncidentScenario)
@@ -135,6 +135,8 @@ export interface SloView {
 }
 
 export interface IncidentView {
+  /** Which scenario this is, so presentation content can be looked up for it. */
+  scenarioId: string
   time: number
   maxTime: number
   complete: boolean
@@ -344,7 +346,10 @@ export class IncidentSession {
     const events = newEntries.flatMap((entry) => (entry.type === 'event' ? [entry.event] : []))
     // Show what the operator learned as it reads now, at the end of the investigation.
     const current = new Map(this.#sim.getObservations().map((value) => [value.id, value]))
-    const revealed = newEntries.flatMap((entry) => (entry.type === 'decision' ? entry.record.revealed : [])).map((value) => ({ ...value, ...current.get(value.id) }))
+    const revealed = newEntries.flatMap((entry) => (entry.type === 'decision' ? entry.record.revealed : [])).map((value) => {
+        const now = { ...value, ...current.get(value.id) }
+        return { ...now, text: factText(this.scenario, now) }
+      })
     return {
       from: before.time,
       to: after.time,
@@ -436,7 +441,7 @@ function buildView(sim: Simulation): IncidentView {
       known.push({
         id: value.id,
         label: value.label,
-        text: (current ?? value).text,
+        text: factText(scenario, current ?? value),
         value: (current ?? value).value,
         description: value.description,
         learnedAt: record.timestamp + duration,
@@ -480,6 +485,7 @@ function buildView(sim: Simulation): IncidentView {
       })
 
   return {
+    scenarioId: scenario.id,
     time: state.time,
     maxTime: scenario.completion.maxDuration,
     complete,
@@ -506,6 +512,33 @@ function buildView(sim: Simulation): IncidentView {
     timeline: timeline(sim),
     decisionsTaken: history.decisions.length,
   }
+}
+
+/** An observation as one line, with numbers rounded the way the rest of the screen shows them. */
+function factText(scenario: Scenario, observed: ObservedValue): string {
+  const { value } = observed
+  const definition = scenario.observations.find((observation) => observation.id === observed.id)
+  if (typeof value !== 'number' || !definition) return observed.text
+  const ratio = (ratio: number) => (ratio >= 0.1 ? percent(ratio, 0) : percent(ratio))
+  const { signal } = definition
+  const shown = (() => {
+    switch (signal.kind) {
+      case 'metric': {
+        const spec = METRICS.find((candidate) => candidate.metric === signal.metric)
+        return spec ? (spec.unit === 'ratio' ? ratio(value) : metricValue(spec.unit, value)) : null
+      }
+      case 'workload':
+        return signal.property === 'readRatio' ? `reads are ${ratio(value)} of traffic, writes ${ratio(1 - value)}` : null
+      case 'configuration':
+      case 'flag':
+        return definition.format === 'ratio' ? ratio(value) : definition.format === 'multiplier' ? `${Number(value.toFixed(1))}×` : null
+      case 'component':
+        return signal.property === 'utilization' || signal.property === 'errorRate' ? ratio(value) : signal.property === 'latencyMs' ? ms(value) : null
+      default:
+        return null
+    }
+  })()
+  return shown === null ? observed.text : `${observed.label}: ${shown}`
 }
 
 function toneFor(spec: MetricSpec, value: number, state: SystemState, budgetLimit: number | null): Tone {

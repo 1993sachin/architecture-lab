@@ -1,14 +1,7 @@
-import { ArrowRight, ChevronRight, Radio } from 'lucide-react'
-import { cn } from '@/lib/cn'
+import { ChevronRight, Radio } from 'lucide-react'
 import type { SymptomExplanation } from '@/lib/incident/reasoning'
+import { ChainView } from './Learn'
 import { Eyebrow } from './shared'
-
-const TONE: Record<SymptomExplanation['chain'][number]['tone'], string> = {
-  up: 'text-warning',
-  down: 'text-failed',
-  unknown: 'text-fg-subtle',
-  plain: 'text-fg',
-}
 
 /**
  * What's happening: a few sentences built from what the operator can see,
@@ -38,17 +31,9 @@ export function SituationPanel({ lines, why, expanded }: { lines: string[]; why:
             {why.lines.map((line) => (
               <p key={line}>{line}</p>
             ))}
-            <ol className="flex flex-wrap items-stretch gap-1" aria-label="How load turns into failures">
-              {why.chain.map((step, index) => (
-                <li key={step.label} className="flex items-center gap-1">
-                  {index > 0 && <ArrowRight className="size-3 shrink-0 text-fg-subtle" aria-hidden="true" />}
-                  <span className="rounded border border-border bg-surface px-2 py-1">
-                    <span className="block text-[11px] text-fg-subtle">{step.label}</span>
-                    <span className={cn('block font-mono text-[12px]', TONE[step.tone])}>{step.value}</span>
-                  </span>
-                </li>
-              ))}
-            </ol>
+            {why.chains.map((chain) => (
+              <ChainView key={chain.id} chain={chain} />
+            ))}
             <div>
               <p className="font-medium text-fg">What the evidence points to:</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
@@ -64,7 +49,7 @@ export function SituationPanel({ lines, why, expanded }: { lines: string[]; why:
                   <li key={line}>{line}</li>
                 ))}
               </ul>
-              <p className="mt-1.5">Which approach makes sense depends on what is causing the failures. Your job is to find and relieve the bottleneck, not to change the number directly.</p>
+              <p className="mt-1.5">There is no universal “increase availability” button. Which approach makes sense depends on why requests are failing.</p>
             </div>
           </div>
         </details>

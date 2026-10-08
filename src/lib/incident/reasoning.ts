@@ -9,6 +9,7 @@
  * names a winning move: it frames evidence, and the engine decides outcomes.
  */
 import { clock, metricValue, ms, percent, rps, usd } from './format'
+import { guideFor, type ConsequenceContext, type DecisionGuide } from './guide'
 import type { ActionView, IncidentView, MetricDelta, MetricKey, Transition } from './session'
 
 // ---------------------------------------------------------------------------
@@ -40,8 +41,14 @@ function revealer(view: IncidentView, factId: string): ActionView | undefined {
   return unknown ? view.actions.find((action) => unknown.revealedBy.includes(action.title)) : undefined
 }
 
-function node(view: IncidentView, id: string) {
-  return view.topology.rows.flat().find((candidate) => candidate.id === id)
+/** The primary database, found by its type so no scenario's ids are baked in. */
+function database(view: IncidentView) {
+  return view.topology.rows.flat().find((candidate) => candidate.type === 'database')
+}
+
+/** What the scenario calls its database, e.g. "PostgreSQL". */
+export function databaseName(view: IncidentView): string {
+  return database(view)?.label ?? 'The database'
 }
 
 /** How a utilization reads: past capacity, close to it, or with room to spare. */
@@ -126,15 +133,17 @@ export function hypotheses(view: IncidentView): Hypothesis[] {
     })
   }
 
-  const dbNode = node(view, 'db')
+  const dbNode = database(view)
+  const roles = guideFor(view.scenarioId).facts
+  const name = databaseName(view)
   if (dbNode) {
-    const reads = fact(view, 'read-ratio')
-    const cacheable = fact(view, 'cacheable-reads')
+    const reads = roles.readShare ? fact(view, roles.readShare) : undefined
+    const cacheable = roles.cacheableShare ? fact(view, roles.cacheableShare) : undefined
     const extra =
       (typeof reads?.value === 'number' ? ` Reads are ${pct(reads.value)} of traffic` : '') +
       (typeof reads?.value === 'number' && typeof cacheable?.value === 'number' ? `, and ${pct(cacheable.value)} of reads are cacheable.` : typeof reads?.value === 'number' ? '.' : '')
     if (db === null) {
-      const action = revealer(view, 'database-cpu')
+      const action = roles.databaseLoad ? revealer(view, roles.databaseLoad) : undefined
       const clue =
         struggling && app !== null && load(app) === 'room'
           ? ' Requests are slow or failing while the application has room, so something it depends on could be struggling.'
@@ -143,7 +152,7 @@ export function hypotheses(view: IncidentView): Hypothesis[] {
         id: 'database',
         label: 'Database saturation',
         status: 'unknown',
-        evidence: `PostgreSQL load is unknown.${clue}${extra}`,
+        evidence: `${name} load is unknown.${clue}${extra}`,
         check: action ? { actionId: action.id, title: action.title } : undefined,
       })
     } else {
@@ -155,21 +164,21 @@ export function hypotheses(view: IncidentView): Hypothesis[] {
         status: level === 'over' ? 'likely' : level === 'near' || masked ? 'possible' : 'unlikely',
         evidence:
           level === 'over'
-            ? `PostgreSQL CPU is ${pct(db)}: evidence suggests the database is a bottleneck.${extra}`
+            ? `${name} CPU is ${pct(db)}: evidence suggests the database is a bottleneck.${extra}`
             : level === 'near'
-              ? `PostgreSQL CPU is ${pct(db)}: close to its limit.${extra}`
+              ? `${name} CPU is ${pct(db)}: close to its limit.${extra}`
               : masked
-                ? `PostgreSQL CPU is ${pct(db)}, but the application fails many requests before they reach it. The database could get busier once the application recovers.`
-                : `PostgreSQL CPU is ${pct(db)}: it has room right now.`,
+                ? `${name} CPU is ${pct(db)}, but the application fails many requests before they reach it. The database could get busier once the application recovers.`
+                : `${name} CPU is ${pct(db)}: it has room right now.`,
       })
     }
     if (dbNode.health !== 'healthy') {
-      list.push({ id: 'failover', label: 'Database failover', status: 'active', evidence: `PostgreSQL is ${dbNode.health} and runs with less capacity until the failover completes.` })
+      list.push({ id: 'failover', label: 'Database failover', status: 'active', evidence: `${name} is ${dbNode.health} and runs with less capacity until the failover completes.` })
     }
   }
 
   if (hit !== null && hit < 0.5) {
-    list.push({ id: 'cache', label: 'Cold cache', status: 'possible', evidence: `Redis answers ${pct(hit)} of reads; the rest still go to PostgreSQL.` })
+    list.push({ id: 'cache', label: 'Cold cache', status: 'possible', evidence: `The cache answers ${pct(hit)} of reads; the rest still go to ${name}.` })
   }
   if (throttled !== null && throttled > 0.0005) {
     list.push({ id: 'throttling', label: 'Your rate limit', status: 'active', evidence: `The gateway rejects ${pct(throttled)} of requests on purpose. They count against availability.` })
@@ -197,8 +206,8 @@ export function situation(view: IncidentView, causes = hypotheses(view)): string
   const app = causes.find((cause) => cause.id === 'application')
   if (app) lines.push(app.evidence)
   const db = value(view, 'dbCpu')
-  if (db === null && node(view, 'db')) lines.push('Database load is unknown.')
-  else if (db !== null) lines.push(`PostgreSQL CPU is ${pct(db)}.`)
+  if (db === null && database(view)) lines.push('Database load is unknown.')
+  else if (db !== null) lines.push(`${databaseName(view)} CPU is ${pct(db)}.`)
   for (const cause of causes) if (cause.id === 'failover' || cause.id === 'throttling') lines.push(cause.evidence)
   return lines
 }
@@ -223,32 +232,129 @@ function impactLine(view: IncidentView): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Why is this happening?
+// How metrics connect
 // ---------------------------------------------------------------------------
 
 export interface ChainStep {
   label: string
-  value: string
+  value?: string
   tone: 'up' | 'down' | 'unknown' | 'plain'
+  /** The step the current evidence is about. */
+  focus?: boolean
 }
+
+/**
+ * A causal chain between metrics. Each one is shown only when the current
+ * state supports it: no cache chain without a cache, no throttling chain
+ * while nothing is throttled.
+ */
+export interface Chain {
+  id: 'load' | 'cache' | 'throttling' | 'queue'
+  title: string
+  steps: ChainStep[]
+  /** The metrics it connects, so a metric's explanation can show the chains it is part of. */
+  metrics: MetricKey[]
+}
+
+export function relationships(view: IncidentView, causes = hypotheses(view)): Chain[] {
+  const chains: Chain[] = []
+  const traffic = value(view, 'traffic')
+  const app = value(view, 'appCpu')
+  const db = value(view, 'dbCpu')
+  const p99 = value(view, 'p99')
+  const errors = value(view, 'errors')
+  const availability = value(view, 'availability')
+  const throttled = value(view, 'throttled')
+  const hit = value(view, 'cacheHit')
+  const queue = value(view, 'queue')
+  const hasDb = database(view) !== undefined
+  const struggling = view.slos.some((candidate) => candidate.breached)
+
+  if (traffic !== null) {
+    const bottlenecks = causes.filter((cause) => cause.status === 'likely' && (cause.id === 'application' || cause.id === 'database'))
+    const dbUnknown = hasDb && db === null
+    const loadValue = [app === null ? null : `app ${pct(app)}`, hasDb ? (db === null ? 'database ?' : `database ${pct(db)}`) : null].filter(Boolean).join(' · ')
+    chains.push({
+      id: 'load',
+      title: 'How load turns into failures',
+      metrics: ['traffic', 'appCpu', 'dbCpu', 'p99', 'errors', 'availability'],
+      steps: [
+        { label: 'Traffic', value: rps(traffic), tone: causes.find((cause) => cause.id === 'traffic')?.status === 'active' ? 'up' : 'plain' },
+        { label: 'Load on each component', value: loadValue, tone: dbUnknown ? 'unknown' : 'up', focus: struggling && bottlenecks.length === 0 && dbUnknown },
+        {
+          label: 'A bottleneck',
+          value: bottlenecks.length > 0 ? bottlenecks.map((cause) => cause.label.toLowerCase()).join(', ') : 'not identified yet',
+          tone: bottlenecks.length > 0 ? 'plain' : 'unknown',
+          focus: struggling && bottlenecks.length > 0,
+        },
+        { label: 'Latency and errors', value: [p99 === null ? null : `p99 ${ms(p99)}`, errors === null ? null : `errors ${pct(errors)}`].filter(Boolean).join(' · '), tone: struggling ? 'up' : 'plain' },
+        { label: 'Availability', value: availability === null ? '?' : percent(availability), tone: slo(view, 'availability')?.breached ? 'down' : 'plain' },
+      ],
+    })
+  }
+  if (throttled !== null && throttled > 0.0005 && traffic !== null) {
+    chains.push({
+      id: 'throttling',
+      title: 'How your rate limit trades users for stability',
+      metrics: ['throttled', 'traffic', 'appCpu', 'availability'],
+      steps: [
+        { label: 'Traffic arriving', value: rps(traffic), tone: 'plain' },
+        { label: 'Rate limit', value: 'rejects the excess', tone: 'plain' },
+        { label: 'Throttled', value: pct(throttled), tone: 'up', focus: true },
+        { label: 'Accepted load', value: rps(traffic * (1 - throttled)), tone: 'down' },
+        { label: 'Pressure behind the gateway', value: app === null ? undefined : `app ${pct(app)}`, tone: 'down' },
+      ],
+    })
+  }
+  if (hit !== null) {
+    chains.push({
+      id: 'cache',
+      title: 'How the cache takes work off the database',
+      metrics: ['cacheHit', 'dbCpu', 'p99'],
+      steps: [
+        { label: 'Cache hit rate', value: pct(hit), tone: 'plain', focus: hit < 0.5 },
+        { label: 'Reads reaching the database', value: `${pct(1 - hit)} of reads`, tone: 'down' },
+        { label: 'Database utilization', value: db === null ? '?' : pct(db), tone: db === null ? 'unknown' : 'down' },
+        { label: 'Latency may fall', value: p99 === null ? undefined : `p99 ${ms(p99)}`, tone: 'down' },
+      ],
+    })
+  }
+  if (queue !== null) {
+    chains.push({
+      id: 'queue',
+      title: 'How the queue defers writes',
+      metrics: ['queue', 'dbCpu'],
+      steps: [
+        { label: 'Writes arrive', tone: 'plain' },
+        { label: 'Waiting in the queue', value: metricValue('messages', queue), tone: queue > 0 ? 'up' : 'plain', focus: queue > 0 },
+        { label: 'Database write load now', value: 'lower', tone: 'down' },
+        { label: 'Writes applied later', value: 'delay', tone: 'plain' },
+      ],
+    })
+  }
+  return chains
+}
+
+// ---------------------------------------------------------------------------
+// Why is this happening?
+// ---------------------------------------------------------------------------
 
 export interface SymptomExplanation {
   title: string
   lines: string[]
-  /** Symptoms are downstream of load: traffic → components → latency and errors → availability. */
-  chain: ChainStep[]
+  /** The chains behind the symptom: always load → failures, plus throttling when it is in play. */
+  chains: Chain[]
   /** What the visible evidence ties the failures to, if anything. */
   associated: string[]
   remedies: string[]
 }
 
-const REMEDIES = ['Relieve the bottleneck', 'Add capacity where it is missing', 'Reduce the load coming in', 'Move work out of the synchronous path']
+const REMEDIES = ['Removing a bottleneck', 'Adding capacity where it is missing', 'Reducing expensive work, for example by caching reads', 'Protecting the system from overload', 'Moving work out of the synchronous path']
 
 export function explainSymptom(view: IncidentView, causes = hypotheses(view)): SymptomExplanation | null {
   const availability = value(view, 'availability')
   const errors = value(view, 'errors') ?? 0
   const throttled = value(view, 'throttled') ?? 0
-  const p99 = value(view, 'p99')
   const availabilityBreached = slo(view, 'availability')?.breached ?? false
   const latencyBreached = slo(view, 'p99')?.breached ?? false
   if (!availabilityBreached && !latencyBreached) return null
@@ -266,6 +372,12 @@ export function explainSymptom(view: IncidentView, causes = hypotheses(view)): S
   const evidence = causes.filter((cause) => cause.status === 'likely' || cause.status === 'active').filter((cause) => cause.id !== 'traffic')
   const unknown = causes.filter((cause) => cause.status === 'unknown')
   const associated = evidence.map((cause) => cause.evidence)
+  const app = value(view, 'appCpu')
+  const db = value(view, 'dbCpu')
+  if (app !== null && db !== null && Math.abs(db - app) >= 0.25 && Math.max(app, db) >= 0.85) {
+    const [high, low] = db > app ? [`${databaseName(view)} (${pct(db)})`, `the application tier (${pct(app)})`] : [`the application tier (${pct(app)})`, `${databaseName(view)} (${pct(db)})`]
+    associated.push(`${capitalize(high)} is showing much higher utilization than ${low}. That makes it a plausible contributor to the ${latencyBreached ? 'latency and ' : ''}failures, not a proven cause.`)
+  }
   if (associated.length === 0) {
     associated.push(
       unknown.length > 0
@@ -273,19 +385,8 @@ export function explainSymptom(view: IncidentView, causes = hypotheses(view)): S
         : 'No component you can see is past its capacity.',
     )
   }
-
-  const traffic = value(view, 'traffic')
-  const app = value(view, 'appCpu')
-  const db = value(view, 'dbCpu')
-  const loadValue = [app === null ? null : `app ${pct(app)}`, node(view, 'db') ? (db === null ? 'database ?' : `database ${pct(db)}`) : null].filter(Boolean).join(' · ')
-  const chain: ChainStep[] = [
-    { label: 'Traffic', value: traffic === null ? '?' : rps(traffic), tone: 'up' },
-    { label: 'Load on each component', value: loadValue, tone: db === null && node(view, 'db') ? 'unknown' : 'up' },
-    { label: 'A bottleneck', value: evidence.length > 0 ? evidence.map((cause) => cause.label.toLowerCase()).join(', ') : 'not identified yet', tone: evidence.length > 0 ? 'plain' : 'unknown' },
-    { label: 'Latency and errors', value: [p99 === null ? null : `p99 ${ms(p99)}`, `errors ${pct(errors)}`].filter(Boolean).join(' · '), tone: 'up' },
-    { label: 'Availability', value: availability === null ? '?' : percent(availability), tone: 'down' },
-  ]
-  return { title, lines, chain, associated, remedies: REMEDIES }
+  const chains = relationships(view, causes).filter((chain) => chain.id === 'load' || chain.id === 'throttling')
+  return { title, lines, chains, associated, remedies: REMEDIES }
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +401,7 @@ export interface YourMove {
 /** Frames the decision in front of the operator. Never names an action. */
 export function yourMove(view: IncidentView, causes = hypotheses(view)): YourMove | null {
   if (view.complete) return null
+  const name = databaseName(view)
   const status = (id: Hypothesis['id']) => causes.find((cause) => cause.id === id)?.status
   const breaches = view.slos.filter((candidate) => candidate.breached).map((candidate) => (candidate.metric === 'p99' ? 'p99 latency' : 'availability'))
   const breaching = breaches.length > 0 ? `${capitalize(breaches.join(' and '))} ${breaches.length > 1 ? 'are' : 'is'} breaching.` : ''
@@ -308,7 +410,7 @@ export function yourMove(view: IncidentView, causes = hypotheses(view)): YourMov
   const rising = status('traffic') === 'active'
 
   if (status('failover') === 'active') {
-    return { framing: `${breaching} PostgreSQL is failing over and has less capacity until it finishes.`.trim(), question: 'Do you wait it out, or protect the system in the meantime?' }
+    return { framing: `${breaching} ${name} is failing over and has less capacity until it finishes.`.trim(), question: 'Do you wait it out, or protect the system in the meantime?' }
   }
   if (view.budget.over && view.budget.headroom !== null) {
     const over = usd(-view.budget.headroom)
@@ -326,12 +428,35 @@ export function yourMove(view: IncidentView, causes = hypotheses(view)): YourMov
   const appLikely = status('application') === 'likely'
   const dbLikely = status('database') === 'likely'
   const dbUnknown = status('database') === 'unknown'
-  if (appLikely && dbLikely) return framed({ framing: `${breaching} Both the application and PostgreSQL are past their capacity.`, question: 'Which bottleneck do you relieve first, and what will the other one do?' })
-  if (dbLikely) return framed({ framing: `${breaching} PostgreSQL is past its capacity while the application ${app !== null && load(app) === 'room' ? 'has room' : 'is also busy'}.`, question: 'How will you relieve the pressure on the database?' })
+  if (appLikely && dbLikely) return framed({ framing: `${breaching} Both the application and ${name} are past their capacity.`, question: 'Which bottleneck do you relieve first, and what will the other one do?' })
+  if (dbLikely) return framed({ framing: `${breaching} ${name} is past its capacity while the application ${app !== null && load(app) === 'room' ? 'has room' : 'is also busy'}.`, question: 'How will you relieve the pressure on the database?' })
   if (appLikely && dbUnknown) return framed({ framing: `${breaching} ${appWords}. Database load is unknown.`, question: rising ? 'Traffic is still climbing. Do you investigate further, add capacity, or protect the system?' : 'Do you add capacity, reduce the load, or find out more first?' })
   if (appLikely) return framed({ framing: `${breaching} ${appWords}.`, question: 'How will you take pressure off the application?' })
   if (dbUnknown) return framed({ framing: `${breaching} ${appWords ? `${appWords}, but database load is unknown.` : 'Database load is unknown.'}`, question: 'What do you want to learn or change?' })
   return framed({ framing: `${breaching} ${appWords ? `${appWords}.` : ''}`.trim(), question: rising ? 'Do you investigate further, add capacity, or protect the system?' : 'What do you want to learn or change?' })
+}
+
+/**
+ * What the operator can say they believe before acting. Built from the
+ * causes on screen, so it never offers one the evidence has not raised.
+ */
+export function hypothesisOptions(causes: Hypothesis[]): { id: string; label: string }[] {
+  const options = causes.filter((cause) => cause.status !== 'unlikely' && (cause.id === 'application' || cause.id === 'database' || cause.id === 'traffic' || cause.id === 'cache' || cause.id === 'writes'))
+  const seen = new Set(options.map((cause) => cause.id))
+  // Application and database are always worth naming, even when the evidence points away: the operator may disagree.
+  for (const id of ['application', 'database'] as const) {
+    const cause = causes.find((candidate) => candidate.id === id)
+    if (cause && !seen.has(id)) options.push(cause)
+  }
+  return [...options.map((cause) => ({ id: cause.id, label: HYPOTHESIS_LABEL[cause.id] ?? cause.label })), { id: 'unsure', label: 'Not sure yet: I need more information' }]
+}
+
+const HYPOTHESIS_LABEL: Partial<Record<Hypothesis['id'], string>> = {
+  application: 'Application capacity',
+  database: 'Database pressure',
+  traffic: 'Traffic overload',
+  cache: 'A cold cache',
+  writes: 'Write backlog',
 }
 
 // ---------------------------------------------------------------------------
@@ -347,19 +472,28 @@ export interface HypothesisChange {
 }
 
 export interface ConsequenceExplanation {
+  /** What the decision tried to do, from the scenario guide. */
+  goal?: string
+  /** What starts to matter now that it is in place. */
+  newRisk?: string
   improved: MetricDelta[]
   worsened: MetricDelta[]
+  /** The few changes worth reading first: impact, then the rest. */
+  headline: MetricDelta[]
   /** Why the visible numbers moved the way they did, given what the operator did. */
   why: string[]
   /** What moved on its own while the operator acted. */
   meanwhile: string[]
   /** How the picture of possible causes changed. */
   changes: HypothesisChange[]
+  /** Where the operator's stated hypothesis stands now. Not a grade: just the evidence. */
+  hypothesis?: { label: string; status: HypothesisStatus; evidence: string }
 }
 
 const IMPACT: MetricKey[] = ['availability', 'p99', 'errors', 'throttled']
+const HEADLINE_ORDER: MetricKey[] = ['availability', 'p99', 'errors', 'throttled', 'dbCpu', 'appCpu', 'cacheHit', 'queue']
 
-export function explainTransition(transition: Transition): ConsequenceExplanation {
+export function explainConsequence(transition: Transition, hypothesis?: { id: string; label: string } | null): ConsequenceExplanation {
   const { before, after, deltas, decision } = transition
   const delta = (key: MetricKey) => deltas.find((candidate) => candidate.key === key)
   const judged = deltas.filter((candidate) => candidate.key !== 'traffic' && candidate.key !== 'cost')
@@ -367,73 +501,34 @@ export function explainTransition(transition: Transition): ConsequenceExplanatio
   const worsened = judged.filter((candidate) => candidate.better === false)
   const impactBetter = IMPACT.some((key) => delta(key)?.better === true)
   const impactWorse = IMPACT.some((key) => delta(key)?.better === false)
-  const why: string[] = []
   const show = (key: MetricKey) => {
     const d = delta(key)
-    return d && d.before !== null && d.after !== null ? `${metricValue(d.unit, d.before)} → ${metricValue(d.unit, d.after)}` : null
+    if (!d || d.before === null || d.after === null) return null
+    // In a sentence, utilizations read better as whole percentages.
+    const shown = (number: number) => (d.unit === 'ratio' && number >= 0.1 ? pct(number) : metricValue(d.unit, number))
+    return `${shown(d.before)} → ${shown(d.after)}`
   }
-  const dbUnknown = value(after, 'dbCpu') === null && node(after, 'db') !== undefined
-  const dbMove = () => {
-    const d = delta('dbCpu')
-    if (dbUnknown) return 'PostgreSQL load is unknown, so watch errors and latency to judge the effect.'
-    if (!d || d.before === null) return null
-    return d.better ? `PostgreSQL CPU ${show('dbCpu')}: less work reaches the database.` : `PostgreSQL CPU ${show('dbCpu')}: the database is doing more work.`
+  const name = databaseName(after)
+  const databaseUnknown = value(after, 'dbCpu') === null && database(after) !== undefined
+  const ctx: ConsequenceContext = {
+    before,
+    after,
+    delta,
+    show,
+    value: (key) => value(after, key),
+    database: name,
+    databaseUnknown,
+    impactBetter,
+    impactWorse,
+    databaseMove: () => {
+      const d = delta('dbCpu')
+      if (databaseUnknown) return `${name} load is unknown, so watch errors and latency to judge the effect.`
+      if (!d || d.before === null) return null
+      return d.better ? `${name} CPU ${show('dbCpu')}: less work reaches the database.` : `${name} CPU ${show('dbCpu')}: the database is doing more work.`
+    },
   }
-
-  switch (decision?.id) {
-    case 'scale-application': {
-      const app = delta('appCpu')
-      if (app?.better) why.push(`The new instances share the work: application CPU ${show('appCpu')}.`)
-      if (!impactBetter) why.push('Errors and latency did not improve, so the application was probably not the only limit.')
-      const db = delta('dbCpu')
-      if (db && db.better === false && db.before !== null) why.push(`PostgreSQL CPU ${show('dbCpu')}: the application now passes more requests to the database. Fixing one bottleneck can expose another.`)
-      else if (dbUnknown && !impactBetter) why.push('Database load is unknown, so you can’t see where the extra work went.')
-      break
-    }
-    case 'enable-cache': {
-      const hit = value(after, 'cacheHit')
-      if (hit !== null) why.push(`Redis now answers ${pct(hit)} of reads; the rest still go to PostgreSQL. It warms up over the next few minutes.`)
-      const line = dbMove()
-      if (line) why.push(line)
-      break
-    }
-    case 'add-database-replica': {
-      why.push('Half of the database reads now go to the replica. Writes still go to the primary.')
-      const line = dbMove()
-      if (line) why.push(line)
-      break
-    }
-    case 'upgrade-database':
-    case 'downgrade-database': {
-      if (node(after, 'db')?.health !== 'healthy') why.push('PostgreSQL is failing over and runs degraded until it completes, so things can get worse before they get better.')
-      break
-    }
-    case 'enable-rate-limiting':
-    case 'tighten-rate-limit':
-    case 'relax-rate-limit': {
-      const throttled = value(after, 'throttled')
-      if (throttled !== null) why.push(`The gateway now turns away ${pct(throttled)} of requests. Those users count against availability, but everything behind the gateway gets less work.`)
-      const app = delta('appCpu')
-      if (app && app.before !== null) why.push(`Application CPU ${show('appCpu')}.`)
-      break
-    }
-    case 'enable-async-writes': {
-      why.push('Writes now wait in a queue and reach the database later, at a steady rate.')
-      const line = dbMove()
-      if (line) why.push(line)
-      break
-    }
-    case 'scale-down-application':
-    case 'remove-database-replica': {
-      const cost = delta('cost')
-      if (cost && cost.before !== null && cost.after !== null) why.push(`You gave back ${usd(cost.before - cost.after)}/month.`)
-      const line = decision.id === 'scale-down-application' && delta('appCpu') ? `Application CPU ${show('appCpu')}: fewer instances share the work.` : dbMove()
-      if (line) why.push(line)
-      break
-    }
-    default:
-      break
-  }
+  const guide: DecisionGuide | undefined = decision ? guideFor(after.scenarioId).decisions[decision.id] : undefined
+  const why = guide?.consequence?.(ctx) ?? []
   for (const entry of transition.delayed) why.push(`${clock(entry.time)}: ${entry.title}`)
 
   const meanwhile: string[] = []
@@ -448,15 +543,33 @@ export function explainTransition(transition: Transition): ConsequenceExplanatio
   if (decision?.kind === 'change' && !impactBetter && !impactWorse && why.length === 0) meanwhile.push('Nothing you can see moved much yet.')
 
   const previous = new Map(hypotheses(before).map((cause) => [cause.id, cause]))
+  const now = hypotheses(after)
   const changes: HypothesisChange[] = []
-  for (const cause of hypotheses(after)) {
+  for (const cause of now) {
     const old = previous.get(cause.id)
     if (cause.id === 'traffic') continue
     // After an investigation, new evidence counts even when the verdict holds.
     const learned = decision?.kind === 'investigate' && old?.evidence !== cause.evidence
     if (!old || old.status !== cause.status || learned) changes.push({ id: cause.id, label: cause.label, from: old?.status ?? null, to: cause.status, evidence: cause.evidence })
   }
-  return { improved, worsened, why, meanwhile, changes }
+
+  const headline = HEADLINE_ORDER.flatMap((key) => {
+    const d = judged.find((candidate) => candidate.key === key)
+    return d ? [d] : []
+  }).slice(0, 4)
+
+  const believed = hypothesis && hypothesis.id !== 'unsure' ? now.find((cause) => cause.id === hypothesis.id) : undefined
+  return {
+    goal: decision ? guide?.goal : undefined,
+    newRisk: decision?.kind === 'change' ? guide?.newRisk : undefined,
+    improved,
+    worsened,
+    headline,
+    why,
+    meanwhile,
+    changes,
+    hypothesis: believed && hypothesis ? { label: hypothesis.label, status: believed.status, evidence: believed.evidence } : undefined,
+  }
 }
 
 /** Sentence case, except for terms that are lowercase by convention (p99). */

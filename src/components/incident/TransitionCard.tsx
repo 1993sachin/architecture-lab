@@ -1,10 +1,12 @@
 import { m } from 'framer-motion'
-import { ArrowRight, CornerDownRight, Lightbulb, TrendingDown, TrendingUp, Zap } from 'lucide-react'
+import { AlertTriangle, ArrowRight, ChevronRight, CornerDownRight, Lightbulb, Target, Zap } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
 import { clock, metricValue } from '@/lib/incident/format'
-import { explainTransition, type HypothesisStatus } from '@/lib/incident/reasoning'
+import { interpretFact } from '@/lib/incident/explain'
+import { explainConsequence, type HypothesisStatus } from '@/lib/incident/reasoning'
 import type { MetricDelta, Transition } from '@/lib/incident/session'
+import type { StatedHypothesis } from '@/store/incidentStore'
 import { Eyebrow } from './shared'
 
 const STATUS_WORD: Record<HypothesisStatus, string> = {
@@ -16,16 +18,17 @@ const STATUS_WORD: Record<HypothesisStatus, string> = {
 }
 
 /**
- * The consequence of the last move: what you did, how far the clock moved,
- * what got better, what got worse, and why, in terms of what you can see.
- * Bad news is told as plainly as good news.
+ * The consequence of the last move, compact: what you did and why, what
+ * changed, why it changed, and what to watch now. The full detail (every
+ * delta, how the picture of causes moved) is one click away.
  */
-export function TransitionCard({ transition, onPostmortem }: { transition: Transition; onPostmortem?: () => void }) {
+export function TransitionCard({ transition, hypothesis, onPostmortem }: { transition: Transition; hypothesis?: StatedHypothesis | null; onPostmortem?: () => void }) {
   const { decision } = transition
-  const explained = explainTransition(transition)
+  const explained = explainConsequence(transition, hypothesis)
   const minutes = transition.to - transition.from
+  const investigation = decision?.kind === 'investigate'
   const headline = decision
-    ? decision.kind === 'investigate'
+    ? investigation
       ? `You investigated: ${decision.title.replace(/^Investigate /, '')}.`
       : `You chose: ${decision.title}.`
     : transition.start
@@ -33,9 +36,16 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
       : transition.to === transition.from
         ? 'Nothing happened.'
         : 'You held and watched.'
-  const eyebrow = decision ? (decision.kind === 'investigate' ? 'Investigation complete' : 'Decision applied') : transition.start ? 'Paged' : 'Time passed'
-  const other = transition.deltas.filter((delta) => delta.key === 'traffic' || delta.key === 'cost')
+  const eyebrow = decision ? (investigation ? 'Investigation complete' : 'What happened') : transition.start ? 'Paged' : 'Time passed'
+  const traffic = transition.deltas.find((delta) => delta.key === 'traffic')
+  const cost = transition.deltas.find((delta) => delta.key === 'cost')
   const worse = explained.worsened.length > 0 && explained.improved.length === 0
+  const [firstWhy, ...moreWhy] = explained.why
+  const shownWhy = [firstWhy, moreWhy[0]].filter((line): line is string => line !== undefined)
+  const restWhy = moreWhy.slice(1)
+  const hidden = explained.headline.length < explained.improved.length + explained.worsened.length
+  const picture = explained.changes.length > 0
+  const more = hidden || restWhy.length > 0 || (picture && !investigation) || explained.meanwhile.length > 1
   return (
     <m.section
       key={`${transition.from}-${transition.to}-${decision?.id ?? 'wait'}`}
@@ -44,25 +54,33 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
       aria-live="polite"
       aria-label="What just happened"
       data-testid="transition"
-      className={cn('rounded-lg border bg-surface p-4', worse ? 'border-failed/40' : explained.improved.length > 0 ? 'border-healthy/40' : 'border-border-strong')}
+      className={cn('rounded-lg border bg-surface p-3.5', worse ? 'border-failed/40' : explained.improved.length > 0 ? 'border-healthy/40' : 'border-border-strong')}
     >
-      <Eyebrow className={worse ? 'text-failed' : 'text-accent'}>{eyebrow}</Eyebrow>
-      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <p className="text-sm font-semibold text-fg">{headline}</p>
-        <span className="flex items-center gap-1.5 font-mono text-sm font-semibold text-fg" data-testid="transition-clock">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <Eyebrow className={worse ? 'text-failed' : 'text-accent'}>{eyebrow}</Eyebrow>
+        <span className="flex items-center gap-1.5 font-mono text-xs font-semibold text-fg" data-testid="transition-clock">
           {clock(transition.from)}
-          <ArrowRight className="size-3.5 text-fg-subtle" aria-hidden="true" />
+          <ArrowRight className="size-3 text-fg-subtle" aria-hidden="true" />
           {clock(transition.to)}
         </span>
-        {minutes > 0 && <span className="text-xs text-fg-subtle">{minutes} min passed</span>}
+        {minutes > 0 && <span className="text-[11px] text-fg-subtle">{minutes} min passed</span>}
         {transition.requested !== undefined && minutes < transition.requested && !transition.complete && (
           <span className="rounded border border-warning/40 bg-warning/10 px-1.5 py-0.5 text-[11px] text-warning">Stopped early: something happened</span>
         )}
       </div>
-      {decision && <p className="mt-0.5 text-xs text-fg-muted italic">“{decision.rationale}”</p>}
+      <p className="mt-1 text-sm font-semibold text-fg">{headline}</p>
+      {explained.goal && (
+        <p className="mt-0.5 flex gap-1.5 text-[13px] text-fg-muted" data-testid="trying-to">
+          <Target className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden="true" />
+          <span>
+            <span className="text-fg">You were trying to:</span> {lowerFirst(explained.goal)}
+          </span>
+        </p>
+      )}
+      {decision && <p className="mt-0.5 line-clamp-2 text-xs text-fg-subtle italic">“{decision.rationale}”</p>}
 
       {transition.revealed.length > 0 && (
-        <div className="mt-3 rounded-md border border-info/40 bg-info/5 p-2.5" data-testid="new-information">
+        <div className="mt-2.5 rounded-md border border-info/40 bg-info/5 p-2.5" data-testid="new-information">
           <Eyebrow className="flex items-center gap-1 text-info">
             <Lightbulb className="size-3" aria-hidden="true" />
             New information · previously unavailable
@@ -71,7 +89,7 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
             {transition.revealed.map((value) => (
               <li key={value.id} className="text-[13px]">
                 <span className="font-medium text-fg">{value.text}</span>
-                {value.description && <span className="block text-xs text-fg-muted">{value.description}</span>}
+                <span className="block text-xs text-fg-muted">{interpretFact(value, transition.after) ?? value.description}</span>
               </li>
             ))}
           </ul>
@@ -79,7 +97,7 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
       )}
 
       {transition.events.length > 0 && (
-        <ul className="mt-3 space-y-1">
+        <ul className="mt-2.5 space-y-1">
           {transition.events.map((event) => (
             <li key={event.eventId} className="flex gap-1.5 text-[13px]">
               <Zap className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
@@ -92,26 +110,31 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
         </ul>
       )}
 
-      {(explained.improved.length > 0 || explained.worsened.length > 0 || other.length > 0) && (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2" aria-label="Changes" role="group">
-          {explained.improved.length > 0 && <DeltaList title="Improved" icon={TrendingUp} tone="text-healthy" deltas={explained.improved} />}
-          {explained.worsened.length > 0 && <DeltaList title="Got worse" icon={TrendingDown} tone="text-failed" deltas={explained.worsened} />}
-          {other.length > 0 && <DeltaList title="Also changed" deltas={other} />}
+      {(explained.headline.length > 0 || traffic || cost) && (
+        <div className="mt-2.5" role="group" aria-label="Changes">
+          <Eyebrow>What changed</Eyebrow>
+          <ul className="mt-1 grid gap-x-6 gap-y-0.5 sm:grid-cols-2" aria-label="What changed">
+            {explained.headline.map((delta) => (
+              <DeltaRow key={delta.key} delta={delta} />
+            ))}
+            {traffic && <DeltaRow delta={traffic} neutral />}
+            {cost && <DeltaRow delta={cost} neutral />}
+          </ul>
         </div>
       )}
       {transition.deltas.length === 0 && minutes > 0 && <p className="mt-2 text-xs text-fg-muted">No visible metric moved noticeably.</p>}
 
-      {(explained.why.length > 0 || explained.meanwhile.length > 0) && (
-        <div className="mt-3 border-t border-border pt-3" data-testid="why-this-happened">
-          <Eyebrow>{explained.why.length > 0 ? 'Why this happened' : 'Meanwhile'}</Eyebrow>
-          <ul className="mt-1 space-y-1 text-[13px] leading-relaxed">
-            {explained.why.map((line) => (
+      {(shownWhy.length > 0 || explained.meanwhile.length > 0) && (
+        <div className="mt-2.5" data-testid="why-this-happened">
+          <Eyebrow>{shownWhy.length > 0 ? 'Why?' : 'Meanwhile'}</Eyebrow>
+          <ul className="mt-0.5 space-y-0.5 text-[13px] leading-relaxed">
+            {shownWhy.map((line) => (
               <li key={line} className="flex gap-1.5 text-fg">
                 <CornerDownRight className="mt-1 size-3 shrink-0 text-accent" aria-hidden="true" />
                 {line}
               </li>
             ))}
-            {explained.meanwhile.map((line) => (
+            {explained.meanwhile.slice(0, 1).map((line) => (
               <li key={line} className="pl-4.5 text-fg-muted">
                 {line}
               </li>
@@ -120,21 +143,57 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
         </div>
       )}
 
-      {explained.changes.length > 0 && (
-        <div className="mt-3 border-t border-border pt-3" data-testid="picture-changed">
-          <Eyebrow>How the picture changed</Eyebrow>
-          <ul className="mt-1 space-y-1 text-[13px]">
-            {explained.changes.map((change) => (
-              <li key={change.id}>
-                <span className="font-medium text-fg">{change.label}:</span>{' '}
-                <span className="font-mono text-xs text-fg-subtle">
-                  {change.from === change.to ? `still ${STATUS_WORD[change.to]}, new evidence` : `${change.from ? `${STATUS_WORD[change.from]} → ` : ''}${STATUS_WORD[change.to]}`}
-                </span>
-                <span className="block text-xs text-fg-muted">{change.evidence}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {explained.newRisk && (
+        <p className="mt-2 flex gap-1.5 text-[13px] text-fg" data-testid="new-risk">
+          <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-warning" aria-hidden="true" />
+          <span>
+            <span className="font-medium">New risk:</span> <span className="text-fg-muted">{explained.newRisk}</span>
+          </span>
+        </p>
+      )}
+
+      {explained.hypothesis && (
+        <p className="mt-2 rounded-md border border-border bg-surface-2 px-2.5 py-1.5 text-[12.5px] leading-snug" data-testid="hypothesis-check">
+          <span className="text-fg">You thought: {explained.hypothesis.label.toLowerCase()}.</span>{' '}
+          <span className="font-mono text-[10px] text-fg-subtle uppercase">Now: {STATUS_WORD[explained.hypothesis.status]}</span>
+          {!(investigation && explained.changes.some((change) => change.evidence === explained.hypothesis?.evidence)) && <span className="block text-fg-muted">{explained.hypothesis.evidence}</span>}
+        </p>
+      )}
+
+      {picture && investigation && <PictureChanged changes={explained.changes} />}
+
+      {more && (
+        <details className="group mt-2.5 border-t border-border pt-2">
+          <summary className="flex cursor-pointer list-none items-center gap-1 text-[12px] font-medium text-fg-muted hover:text-fg [&::-webkit-details-marker]:hidden">
+            <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+            Everything that changed
+          </summary>
+          <div className="mt-2 space-y-3">
+            {hidden && (
+              <ul className="grid gap-x-6 gap-y-0.5 sm:grid-cols-2" aria-label="All changes">
+                {[...explained.improved, ...explained.worsened].map((delta) => (
+                  <DeltaRow key={delta.key} delta={delta} />
+                ))}
+              </ul>
+            )}
+            {(restWhy.length > 0 || explained.meanwhile.length > 1) && (
+              <ul className="space-y-0.5 text-[13px] leading-relaxed">
+                {restWhy.map((line) => (
+                  <li key={line} className="flex gap-1.5 text-fg">
+                    <CornerDownRight className="mt-1 size-3 shrink-0 text-accent" aria-hidden="true" />
+                    {line}
+                  </li>
+                ))}
+                {explained.meanwhile.slice(1).map((line) => (
+                  <li key={line} className="pl-4.5 text-fg-muted">
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {picture && !investigation && <PictureChanged changes={explained.changes} />}
+          </div>
+        </details>
       )}
 
       {transition.complete && (
@@ -151,25 +210,38 @@ export function TransitionCard({ transition, onPostmortem }: { transition: Trans
   )
 }
 
-function DeltaList({ title, icon: Icon, tone, deltas }: { title: string; icon?: typeof TrendingUp; tone?: string; deltas: MetricDelta[] }) {
+function PictureChanged({ changes }: { changes: ReturnType<typeof explainConsequence>['changes'] }) {
   return (
-    <div>
-      <p className={cn('flex items-center gap-1 text-[11px] font-semibold tracking-wide uppercase', tone ?? 'text-fg-subtle')}>
-        {Icon && <Icon className="size-3.5" aria-hidden="true" />}
-        {title}
-      </p>
-      <ul className="mt-1 space-y-0.5" aria-label={title}>
-        {deltas.map((delta) => (
-          <li key={delta.key} className="flex items-center gap-1.5 font-mono text-[13px]">
-            <span className="w-28 shrink-0 truncate font-sans text-xs text-fg-muted">{delta.label}</span>
-            <span className="text-fg-muted">{delta.before === null ? 'unknown' : metricValue(delta.unit, delta.before)}</span>
-            <ArrowRight className="size-3 text-fg-subtle" aria-hidden="true" />
-            <span className={cn('font-semibold', delta.better === null || title === 'Also changed' ? 'text-fg' : delta.better ? 'text-healthy' : 'text-failed')}>
-              {delta.after === null ? 'unknown' : metricValue(delta.unit, delta.after)}
+    <div className="mt-2.5" data-testid="picture-changed">
+      <Eyebrow>How the picture changed</Eyebrow>
+      <ul className="mt-0.5 space-y-1 text-[13px]">
+        {changes.map((change) => (
+          <li key={change.id}>
+            <span className="font-medium text-fg">{change.label}:</span>{' '}
+            <span className="font-mono text-xs text-fg-subtle">
+              {change.from === change.to ? `still ${STATUS_WORD[change.to]}, new evidence` : `${change.from ? `${STATUS_WORD[change.from]} → ` : ''}${STATUS_WORD[change.to]}`}
             </span>
+            <span className="block text-xs text-fg-muted">{change.evidence}</span>
           </li>
         ))}
       </ul>
     </div>
   )
+}
+
+function DeltaRow({ delta, neutral }: { delta: MetricDelta; neutral?: boolean }) {
+  const tone = neutral || delta.better === null ? 'text-fg' : delta.better ? 'text-healthy' : 'text-failed'
+  return (
+    <li className="flex items-center gap-1.5 font-mono text-[13px]">
+      <span className={cn('w-28 shrink-0 truncate font-sans text-xs', neutral ? 'text-fg-subtle' : 'text-fg-muted')}>{delta.label}</span>
+      <span className="text-fg-muted">{delta.before === null ? 'unknown' : metricValue(delta.unit, delta.before)}</span>
+      <ArrowRight className="size-3 text-fg-subtle" aria-hidden="true" />
+      <span className={cn('font-semibold', tone)}>{delta.after === null ? 'unknown' : metricValue(delta.unit, delta.after)}</span>
+      {!neutral && delta.better !== null && <span className="sr-only">{delta.better ? '(better)' : '(worse)'}</span>}
+    </li>
+  )
+}
+
+function lowerFirst(text: string): string {
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text
 }
