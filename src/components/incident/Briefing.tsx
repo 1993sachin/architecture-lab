@@ -28,7 +28,7 @@ export function Briefing({ scenario, view, onStart }: { scenario: Scenario; view
   const complexity = constraints.find((constraint) => constraint.kind === 'complexity')
   const points = [
     { icon: EyeOff, title: 'You cannot see everything', text: `${view.unknown.length} things about your own system are unknown until you investigate. You will have to decide with what you can see.` },
-    { icon: Search, title: 'You can investigate', text: 'Investigating takes a couple of minutes and changes nothing. It turns unknowns into facts.' },
+    { icon: Search, title: 'You can investigate', text: 'Investigating takes a couple of minutes while the incident continues. What you learn can change which fix makes sense.' },
     { icon: Clock, title: 'Time keeps moving', text: 'Each decision takes time. Traffic keeps changing while you think and while you act.' },
     { icon: Wallet, title: 'Everything costs money', text: budget === null ? 'Every change adds to the monthly bill.' : `Every change adds to a monthly budget of ${usd(budget)}. Finance is watching.` },
     { icon: Scale, title: 'There is no single right answer', text: 'Different moves trade users served, cost and complexity. The postmortem shows what yours cost.' },

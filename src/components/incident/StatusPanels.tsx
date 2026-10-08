@@ -5,23 +5,7 @@ import { metricValue, ms } from '@/lib/incident/format'
 import type { IncidentView, MetricKey, MetricView } from '@/lib/incident/session'
 import { Eyebrow, TONE_COLOR, TONE_TEXT } from './shared'
 
-const SYSTEM: MetricKey[] = ['traffic', 'appCpu', 'dbCpu', 'cacheHit', 'queue']
 const IMPACT: MetricKey[] = ['p99', 'errors', 'throttled', 'availability']
-
-export function SystemStatus({ view }: { view: IncidentView }) {
-  return (
-    <section aria-labelledby="system-status" className="rounded-lg border border-border bg-surface p-3">
-      <Eyebrow className="mb-2">
-        <span id="system-status">System status</span>
-      </Eyebrow>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {SYSTEM.map((key) => (
-          <MetricTile key={key} metric={view.metrics[key]} />
-        ))}
-      </div>
-    </section>
-  )
-}
 
 export function IncidentImpact({ view }: { view: IncidentView }) {
   const breached = view.sloBreaches.length > 0

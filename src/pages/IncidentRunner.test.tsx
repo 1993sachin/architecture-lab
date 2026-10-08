@@ -75,22 +75,25 @@ describe('Incident Runner', () => {
   it('hides what the operator cannot observe yet', async () => {
     const user = setup()
     await takeIncident(user)
-    const db = screen.getByTestId('metric-dbCpu')
-    expect(within(db).getByLabelText('Database CPU unknown')).toBeTruthy()
-    expect(db.textContent).toMatch(/investigate the database/i)
+    // The database's load is not among the things you know, and nothing on screen gives it away.
+    expect(screen.queryByTestId('metric-dbCpu')).toBeNull()
     expect(screen.getByTestId('node-db').textContent).toMatch(/load unknown/)
     const unknowns = screen.getByRole('list', { name: 'Unknowns' })
     expect(within(unknowns).getByText(/PostgreSQL CPU/)).toBeTruthy()
+    expect(within(unknowns).getByRole('button', { name: /Investigate the database/ })).toBeTruthy()
+    expect(screen.getByTestId('situation').textContent).toMatch(/Database load is unknown/)
+    expect(screen.getByTestId('cause-database').textContent).toMatch(/You don’t know yet/)
+    expect(document.body.textContent).not.toMatch(/PostgreSQL CPU is \d/)
   })
 
-  it('investigation takes time, changes nothing and reveals new information', async () => {
+  it('investigation is a decision: it takes time while the incident continues, and reveals new information', async () => {
     const user = setup()
     await takeIncident(user)
     await user.click(actionButton('Investigate the database'))
     const dialog = screen.getByRole('dialog')
-    expect(within(dialog).getByText('Takes ~2 minutes')).toBeTruthy()
-    expect(within(dialog).getByText('Traffic keeps changing')).toBeTruthy()
-    expect(within(dialog).getByText('No architecture changes')).toBeTruthy()
+    expect(within(dialog).getByText('This takes about 2 minutes.')).toBeTruthy()
+    expect(within(dialog).getByText('The incident continues while you investigate.')).toBeTruthy()
+    expect(within(dialog).getByText(/may change which intervention makes sense/)).toBeTruthy()
     await user.type(within(dialog).getByLabelText('Why are you doing this?'), 'Is the database the bottleneck?')
     await user.click(within(dialog).getByRole('button', { name: 'Investigate' }))
     expect(clock()).toBe('T+05')
@@ -99,6 +102,9 @@ describe('Incident Runner', () => {
     expect(reveal.textContent).toMatch(/PostgreSQL CPU/)
     expect(screen.getByTestId('metric-dbCpu').textContent).toMatch(/%/)
     expect(screen.getByTestId('budget').textContent).toMatch(/\$1,862/)
+    // What was unknown is now evidence, and the card says how the picture changed.
+    expect(screen.getByTestId('cause-database').textContent).toMatch(/Evidence suggests/)
+    expect(screen.getByTestId('picture-changed').textContent).toMatch(/Database saturation: unknown → evidence suggests/)
   })
 
   it('confirms a decision with its cost, complexity, effect and risks', async () => {
@@ -139,7 +145,8 @@ describe('Incident Runner', () => {
     const transition = screen.getByTestId('transition')
     expect(transition.textContent).toMatch(/You chose: Add a Redis cache/)
     expect(screen.getByTestId('transition-clock').textContent).toBe('T+03T+04')
-    expect(within(transition).getByRole('list', { name: 'Changes' }).textContent).toMatch(/Monthly cost/)
+    expect(within(transition).getByRole('group', { name: 'Changes' }).textContent).toMatch(/Monthly cost/)
+    expect(within(transition).getByTestId('why-this-happened').textContent).toMatch(/Redis now answers/)
     expect(screen.getByTestId('node-cache').textContent).toMatch(/new/)
     await user.click(screen.getByRole('button', { name: 'Wait 1 min' }))
     expect(clock()).toBe('T+05')

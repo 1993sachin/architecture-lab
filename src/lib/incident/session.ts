@@ -125,12 +125,23 @@ export interface TimelineEntry {
   detail?: string
 }
 
+export interface SloView {
+  id: string
+  /** Which tile it judges. */
+  metric: MetricKey
+  bound: 'max' | 'min'
+  limit: number
+  breached: boolean
+}
+
 export interface IncidentView {
   time: number
   maxTime: number
   complete: boolean
   status: IncidentStatus
   sloBreaches: string[]
+  /** The SLOs as numbers, the same ones the briefing shows. */
+  slos: SloView[]
   incidentStartedAt: number | null
   metrics: Record<MetricKey, MetricView>
   budget: BudgetView
@@ -181,6 +192,9 @@ export interface Transition {
   requested?: number
   /** The opening transition: the shift began and ran until the operator was paged. */
   start?: true
+  /** What the operator could see before and after, for explaining the change. */
+  before: IncidentView
+  after: IncidentView
 }
 
 export type DecideResult = { status: 'applied'; transition: Transition } | { status: 'rejected'; reason: string }
@@ -341,6 +355,8 @@ export class IncidentSession {
       delayed: after.timeline.filter((entry) => entry.kind === 'consequence' && entry.time > before.time && entry.time <= after.time),
       constraintChanges: constraintChanges(history.entries, entriesBefore, events, after.budget.monthlyCost),
       complete: after.complete,
+      before,
+      after,
     }
   }
 }
@@ -469,6 +485,10 @@ function buildView(sim: Simulation): IncidentView {
     complete,
     status,
     sloBreaches: breaches.map((id) => sloConstraints.find((constraint) => constraint.id === id)?.description ?? id),
+    slos: sloConstraints.flatMap((constraint) => {
+      const spec = constraint.kind === 'metric' ? METRICS.find((candidate) => candidate.metric === constraint.metric) : undefined
+      return constraint.kind === 'metric' && spec ? [{ id: constraint.id, metric: spec.key, bound: constraint.bound, limit: constraint.limit, breached: breaches.includes(constraint.id) }] : []
+    }),
     incidentStartedAt,
     metrics,
     budget: {
