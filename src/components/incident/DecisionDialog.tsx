@@ -3,6 +3,8 @@ import { AlertTriangle, Clock, Layers, Search, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { clock, signedUsd, usd } from '@/lib/incident/format'
 import type { ActionView, IncidentView } from '@/lib/incident/session'
+import { intentOf } from '@/lib/incident/intents'
+import { IntentDetails } from './ActionsPanel'
 import { Eyebrow, Modal } from './shared'
 
 interface DecisionDialogProps {
@@ -22,6 +24,7 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
   const [tried, setTried] = useState(false)
   const missing = rationale.trim() === ''
   const investigate = action.kind === 'investigate'
+  const intent = intentOf(action)
   const cost = view.budget.monthlyCost + action.monthlyCost
   const submit = () => {
     setTried(true)
@@ -38,6 +41,11 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
       }
     >
       <div className="space-y-4 px-5 py-4">
+        <div>
+          <Eyebrow>{investigate ? 'What you are trying to learn' : 'What it tries to solve'}</Eyebrow>
+          <p className="mt-1 text-sm font-medium leading-relaxed text-fg">{intent.purpose}</p>
+          {!investigate && <IntentDetails action={action} className="mt-1 px-0 pb-0" />}
+        </div>
         <div>
           <Eyebrow>Expected effect</Eyebrow>
           <p className="mt-1 text-sm leading-relaxed text-fg">{action.description}</p>
@@ -70,12 +78,12 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
           <div className="rounded-md border border-info/30 bg-info/5 p-3 text-[13px] text-fg">
             <p className="flex items-center gap-1.5 font-medium">
               <Search className="size-3.5 text-info" aria-hidden="true" />
-              While you investigate
+              Investigating is a decision too
             </p>
             <ul className="mt-1 list-disc space-y-0.5 pl-5 text-fg-muted">
-              <li>Takes ~{action.minutes} minutes</li>
-              <li>Traffic keeps changing</li>
-              <li>No architecture changes</li>
+              <li>This takes about {action.minutes} minutes.</li>
+              <li>The incident continues while you investigate.</li>
+              <li>What you learn may change which intervention makes sense.</li>
             </ul>
             {action.reveals.length > 0 && <p className="mt-1.5 text-xs text-fg-subtle">You will learn: {action.reveals.join(', ')}.</p>}
           </div>
@@ -106,7 +114,7 @@ export function DecisionDialog({ action, view, onCancel, onConfirm }: DecisionDi
             rows={3}
             aria-invalid={tried && missing}
             aria-describedby={tried && missing ? 'rationale-error' : undefined}
-            placeholder={investigate ? 'e.g. I need to know if the database is the bottleneck before spending money' : 'e.g. Reads dominate, so a cache should take load off PostgreSQL'}
+            placeholder={investigate ? 'e.g. I need to know if the database is the bottleneck before spending money' : 'e.g. I think the bottleneck is …, because …, so this should …'}
             className="mt-1.5 w-full rounded-md border border-border bg-surface-2 px-3 py-2 text-sm text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
           />
           {tried && missing && (

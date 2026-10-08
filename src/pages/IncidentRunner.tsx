@@ -10,9 +10,12 @@ import { IncidentHeader } from '@/components/incident/IncidentHeader'
 import { IncidentTimeline } from '@/components/incident/IncidentTimeline'
 import { KnowledgePanel } from '@/components/incident/KnowledgePanel'
 import { Postmortem } from '@/components/incident/Postmortem'
-import { IncidentImpact, SystemStatus } from '@/components/incident/StatusPanels'
+import { CausesPanel } from '@/components/incident/CausesPanel'
+import { SituationPanel } from '@/components/incident/SituationPanel'
+import { IncidentImpact } from '@/components/incident/StatusPanels'
 import { TopologyView } from '@/components/incident/TopologyView'
 import { TransitionCard } from '@/components/incident/TransitionCard'
+import { explainSymptom, hypotheses, situation, stage, yourMove } from '@/lib/incident/reasoning'
 import { useIncidentStore } from '@/store/incidentStore'
 
 /**
@@ -43,7 +46,13 @@ export default function IncidentRunner() {
     )
   }
 
-  const actions = !replay && !view.complete ? <ActionsPanel view={view} onSelect={store.select} onWait={store.wait} onFinish={store.finish} /> : null
+  // The reasoning layer: built only from the view, which holds nothing the operator cannot see.
+  const causes = hypotheses(view)
+  const when = stage(view)
+  const live = !replay && !view.complete
+  const actions = live ? (
+    <ActionsPanel view={view} move={yourMove(view, causes)} explain={when === 'early'} onSelect={store.select} onWait={store.wait} onFinish={store.finish} />
+  ) : null
 
   return (
     <div className="mx-auto max-w-7xl space-y-4 px-4 py-6 sm:px-6">
@@ -63,13 +72,16 @@ export default function IncidentRunner() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="min-w-0 space-y-4">
           <IncidentImpact view={view} />
+          <SituationPanel lines={situation(view, causes)} why={explainSymptom(view, causes)} expanded={when === 'early'} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <KnowledgePanel view={view} onInvestigate={live ? store.select : undefined} />
+            <CausesPanel causes={causes} onCheck={live ? store.select : undefined} compact={when === 'late'} />
+          </div>
           {!wide && actions}
-          <SystemStatus view={view} />
           <div className="grid gap-4 md:grid-cols-2">
             <TopologyView topology={view.topology} />
-            <KnowledgePanel view={view} />
+            <IncidentTimeline entries={view.timeline} />
           </div>
-          <IncidentTimeline entries={view.timeline} />
         </div>
         <div className="space-y-4">
           {wide && actions}
