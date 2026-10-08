@@ -65,6 +65,11 @@ export default function IncidentRunner() {
   const when = stage(view)
   const live = !replay && !view.complete
   const breached = view.slos.some((slo) => slo.breached)
+  const focusActions = () => {
+    const heading = document.getElementById('available-actions')
+    heading?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    heading?.closest('section')?.querySelector<HTMLButtonElement>('[role=group] button:not([disabled])')?.focus({ preventScroll: true })
+  }
   // Guidance reads the same view plus what the operator has done; it never acts on its own.
   const context = guidanceContext(view, store.guidance, causes)
   const struggle = detectStruggle(context)
@@ -78,6 +83,7 @@ export default function IncidentRunner() {
       onHypothesis={store.setHypothesis}
       explain={when === 'early'}
       guides={mode.concepts}
+      proactive={mode.yourMove}
       guidance={
         mode.hints && breached ? (
           <GuidancePanel
@@ -86,6 +92,8 @@ export default function IncidentRunner() {
             struggle={showPrompt ? struggle : null}
             onHint={store.askHint}
             onCloseHint={store.closeHint}
+            onRevisit={store.revisitHint}
+            onDecide={focusActions}
             onDismissPrompt={store.dismissPrompt}
             onReasoningFlow={store.noteReasoningFlow}
             onSelect={store.select}
@@ -98,6 +106,17 @@ export default function IncidentRunner() {
     />
   ) : null
   const check = live ? store.select : undefined
+  const consequence =
+    transition && phase === 'running' ? (
+      <TransitionCard
+                transition={transition}
+                hypothesis={transitionHypothesis}
+                why={mode.consequenceWhy}
+                objective={objectiveResult(transitionObjective, transition)}
+                clue={mode.hints ? newClue(transition) : null}
+                onPostmortem={replay ? undefined : store.openPostmortem}
+              />
+    ) : null
 
   return (
     <LearningContext.Provider value={{ enabled: mode.concepts, onOpen: store.noteExplanation }}>
@@ -109,7 +128,7 @@ export default function IncidentRunner() {
             <p className="text-fg">
               <span className="font-medium text-failed">Decision refused.</span> {rejection}
             </p>
-            <button type="button" aria-label="Dismiss" onClick={store.dismissRejection} className="text-fg-subtle hover:text-fg">
+            <button type="button" aria-label="Dismiss" onClick={store.dismissRejection} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
               <X className="size-4" aria-hidden="true" />
             </button>
           </div>
@@ -117,20 +136,13 @@ export default function IncidentRunner() {
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
           <div className="min-w-0 space-y-4">
             {/* In the main column, so the decision panel beside it stays at the top of the screen. */}
-            {transition && phase === 'running' && (
-              <TransitionCard
-                transition={transition}
-                hypothesis={transitionHypothesis}
-                why={mode.consequenceWhy}
-                objective={objectiveResult(transitionObjective, transition)}
-                clue={mode.hints ? newClue(transition) : null}
-                onPostmortem={replay ? undefined : store.openPostmortem}
-              />
-            )}
+            {wide && consequence}
             <IncidentImpact view={view} causes={causes} onCheck={check} />
+            {/* On a phone the impact comes first: what is happening now, then what the last move did. */}
+            {!wide && consequence}
             {mode.interpretation && <SituationPanel lines={situation(view, causes)} why={explainSymptom(view, causes)} expanded={when === 'early'} />}
             <div className={mode.interpretation ? 'grid gap-4 md:grid-cols-2' : undefined}>
-              <KnowledgePanel view={view} causes={causes} onInvestigate={check} />
+              <KnowledgePanel view={view} causes={causes} onInvestigate={check} raw={!mode.concepts} />
               {mode.interpretation && <CausesPanel causes={causes} onCheck={check} compact={when === 'late'} />}
             </div>
             {!wide && actions}

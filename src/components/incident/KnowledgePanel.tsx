@@ -16,7 +16,7 @@ const SUPPORTING: MetricKey[] = ['traffic', 'appCpu', 'dbCpu', 'cacheHit', 'queu
  * how to find out. Hidden values never get here: the view only carries what
  * the engine says is observable.
  */
-export function KnowledgePanel({ view, causes, onInvestigate }: { view: IncidentView; causes: Hypothesis[]; onInvestigate?: (actionId: string) => void }) {
+export function KnowledgePanel({ view, causes, onInvestigate, raw = false }: { view: IncidentView; causes: Hypothesis[]; onInvestigate?: (actionId: string) => void; /** Expert mode: values only, no interpretation and no list of unknowns. */ raw?: boolean }) {
   const signals = SUPPORTING.map((key) => view.metrics[key]).filter((metric) => metric.known)
   // One entry per investigation, listing everything it would reveal.
   const byAction = new Map<string, UnknownFact[]>()
@@ -48,7 +48,7 @@ export function KnowledgePanel({ view, causes, onInvestigate }: { view: Incident
               <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-healthy" aria-hidden="true" />
               <div>
                 <p className="text-[13px] font-medium text-fg">{fact.text}</p>
-                <FactMeaning text={interpretFact(fact, view) ?? fact.description} />
+                {!raw && <FactMeaning text={interpretFact(fact, view) ?? fact.description} />}
                 <p className="font-mono text-[10px] text-fg-subtle">
                   learned {clock(fact.learnedAt)} · {fact.learnedBy.toLowerCase()}
                 </p>
@@ -57,7 +57,7 @@ export function KnowledgePanel({ view, causes, onInvestigate }: { view: Incident
           ))}
         </ul>
       )}
-      {view.unknown.length > 0 && (
+      {!raw && view.unknown.length > 0 && (
         <>
           <Eyebrow className="mt-4 mb-1.5 text-fg">What you don’t know</Eyebrow>
           <ul className="space-y-2.5" aria-label="Unknowns">

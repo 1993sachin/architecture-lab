@@ -6,7 +6,9 @@ import { EMPTY_HISTORY, guidanceContext, outcomeOf, type GuidanceHistory } from 
 import { evidence, missing, symptoms } from './flow'
 import { guidance, investigateFirst } from './hints'
 import { newClue } from './clues'
-import { reflect } from './reflection'
+import { explainAlternative, reflect } from './reflection'
+import { objectiveResult } from './objectives'
+import { useIncidentStore } from '@/store/incidentStore'
 import { situationOf } from './situation'
 import { detectStruggle, nextLevel } from './struggle'
 
@@ -165,23 +167,115 @@ describe('Help me reason', () => {
 })
 
 describe('postmortem reflection', () => {
-  it('records reasoning and help used, without touching the score', () => {
-    const run = playSteps(PLAYBOOKS.find((playbook) => /investigate first/i.test(playbook.name))!.steps)
-    const used = { hints: 2, strongHints: 1, rescues: 0, reasoningFlows: 1, explanations: 3 }
+  const investigateFirst = () => PLAYBOOKS.find((playbook) => /investigate first/i.test(playbook.name))!.steps
+
+  it('reviews decision quality and counts help without touching the score', () => {
+    const run = playSteps(investigateFirst())
+    const used = { hints: 2, strongHints: 1, rescues: 1, reasoningFlows: 0, explanations: 3 }
     const reflection = reflect(run.getPostmortem(), SCENARIO, used)
     expect(reflection.success).toBe(true)
-    expect(reflection.recovered).toMatch(/You recovered the system at T\+\d\d/)
-    expect(reflection.checks.find((check) => check.id === 'investigated-first')?.done).toBe(true)
-    expect(reflection.checks.find((check) => check.id === 'measured-database')?.done).toBe(true)
-    expect(reflection.guidance.find((entry) => entry.label === 'Hints')?.count).toBe(2)
-    expect(run.getPostmortem().summary.score).toBe(playSteps(PLAYBOOKS.find((playbook) => /investigate first/i.test(playbook.name))!.steps).getPostmortem().summary.score)
+    expect(reflection.headline).toMatch(/You recovered the system at T\+\d\d/)
+    expect(reflection.checks.find((check) => check.id === 'investigated-first')?.status).toBe('good')
+    expect(reflection.checks.find((check) => check.id === 'measured-database')?.status).toBe('good')
+    expect(reflection.checks.find((check) => check.id === 'reduced-database-work')?.status).toBe('good')
+    expect(reflection.guidance.total).toBe(4)
+    expect(reflection.well).toMatch(/You investigated before your first capacity change/)
+    expect(reflection.tryAgain).toBe(false)
+    // Help is reported, never scored: the same decisions give the same score.
+    expect(run.getPostmortem().summary.score).toBe(playSteps(investigateFirst()).getPostmortem().summary.score)
   })
 
-  it('explains why scaling alone fell short', () => {
-    const run = playSteps([{ at: 3, decision: 'scale-application', rationale: 'x' }, { at: 5, decision: 'scale-application', rationale: 'x' }])
+  it('flags scaling the application after the database was seen to be constrained, and says what happened', () => {
+    const run = playSteps([
+      { at: 3, decision: 'investigate-database', rationale: 'x' },
+      { at: 5, decision: 'scale-application', rationale: 'x' },
+    ])
     const reflection = reflect(run.getPostmortem(), SCENARIO, EMPTY_HISTORY.used)
-    expect(reflection.learning).toMatch(/database became the bottleneck|stayed unknown/)
-    expect(reflection.learning).toMatch(/Try the incident again/)
+    expect(reflection.checks.find((check) => check.id === 'scaled-into-constraint')?.status).toBe('concern')
+    expect(reflection.improve).toMatch(/after database pressure was already visible \(PostgreSQL at \d+%\)/)
+    expect(reflection.happened).toMatch(/reduced application pressure .* but pushed more work toward PostgreSQL/)
+    expect(reflection.learn).toMatch(/the bottleneck may have shifted rather than disappeared/)
+  })
+
+  it('teaches on failure instead of labelling the strategy wrong', () => {
+    const run = playSteps([{ at: 3, decision: 'scale-application', rationale: 'x' }])
+    const reflection = reflect(run.getPostmortem(), SCENARIO, EMPTY_HISTORY.used)
+    expect(reflection.success).toBe(false)
+    expect(reflection.tryAgain).toBe(true)
+    expect(reflection.checks.find((check) => check.id === 'investigated-first')?.status).toBe('missed')
+    const all = [reflection.headline, reflection.well, reflection.improve, reflection.happened, reflection.learn].join(' ')
+    expect(all).not.toMatch(/wrong|should have|correct/i)
+  })
+
+  it('explains a counterfactual as your decision against the alternative, from engine results', () => {
+    const run = playSteps([{ at: 3, decision: 'scale-application', rationale: 'x' }])
+    const alternative = playSteps([{ at: 3, decision: 'enable-cache', rationale: 'x' }])
+    const scale = { title: 'Scale the application', guide: { group: 'capacity' as const, goal: 'Increase application processing capacity.' } }
+    const cache = { title: 'Add a Redis cache', guide: { group: 'optimize' as const, goal: 'Reduce database pressure.' } }
+    const why = explainAlternative(run, alternative, 3, scale, cache, 'PostgreSQL')
+    expect(why.mine.goal).toBe('Increase application processing capacity.')
+    expect(why.alternative.result.join(' ')).toMatch(/The cache answered \d+% of reads/)
+    expect(why.overall).toMatch(/availability averaged/)
+  })
+})
+
+describe('objectives', () => {
+  it('does not equate lower utilization with more capacity: it judges work served', () => {
+    const session = paged()
+    applied(session, 'investigate-database')
+    const scaled = applied(session, 'scale-application')
+    // Application CPU fell after scaling, yet fewer requests were served.
+    expect(scaled.after.metrics.appCpu.value!).toBeLessThan(scaled.before.metrics.appCpu.value!)
+    const result = objectiveResult('capacity', scaled)!
+    expect(result.verdict).not.toBe('better')
+    expect(result.text).toMatch(/Successful requests/)
+    expect(result.text).not.toMatch(/CPU/)
+  })
+
+  it('credits capacity when more work is served without more failures', () => {
+    const session = paged()
+    session.wait(4)
+    applied(session, 'enable-rate-limiting')
+    session.wait(2)
+    applied(session, 'enable-cache')
+    session.wait(3)
+    const relaxed = applied(session, 'relax-rate-limit')
+    const result = objectiveResult('capacity', relaxed)!
+    if (result.verdict === 'better') expect(result.text).toMatch(/served more work without failing more/)
+    else expect(['worse', 'unclear']).toContain(result.verdict)
+  })
+})
+
+describe('guidance ladder is finite and contextual', () => {
+  it('resets when the situation changes and does not repeat guided reasoning forever', () => {
+    useIncidentStore.getState().runAgain()
+    const store = () => useIncidentStore.getState()
+    store().start()
+    store().acknowledgePage()
+    store().askHint()
+    store().askHint()
+    store().askHint()
+    expect(store().hint).toMatchObject({ level: 4, exhausted: false })
+    store().askHint()
+    expect(store().hint).toMatchObject({ level: 4, exhausted: true })
+    // Asking again does not count as more guidance used.
+    expect(store().guidance.used).toMatchObject({ hints: 1, strongHints: 1, rescues: 1 })
+    store().revisitHint()
+    expect(store().hint?.exhausted).toBe(false)
+    // Measuring the database is a new situation: the ladder starts again at the hint.
+    store().select('investigate-database')
+    store().confirm('Is it the database?')
+    store().askHint()
+    expect(store().hint).toMatchObject({ level: 2, exhausted: false })
+  })
+
+  it('struggle detection is deterministic', () => {
+    const run = () => {
+      const session = paged()
+      const outcomes = [applied(session, 'scale-application'), session.wait(1), session.wait(1)].map(outcomeOf)
+      return detectStruggle(guidanceContext(session.view(), { ...EMPTY_HISTORY, outcomes }))
+    }
+    expect(JSON.stringify(run())).toBe(JSON.stringify(run()))
   })
 })
 

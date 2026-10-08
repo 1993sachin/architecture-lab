@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Brain, Circle, CheckCircle2, MinusCircle, Play, RotateCcw, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
+import { AlertTriangle, Brain, Circle, CheckCircle2, MinusCircle, Play, RotateCcw, ThumbsDown, ThumbsUp, XCircle } from 'lucide-react'
 import type { Postmortem as EngineReport, Scenario, Simulation } from '@architecture-lab/engine'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
@@ -8,7 +8,7 @@ import { snapshotTopology } from '@/lib/incident/session'
 import { counterfactual, groupSignals, playbookRuns, summarize, tradeOffs, type RunSummary } from '@/lib/incident/review'
 import { decisionGuide } from '@/lib/incident/explain'
 import type { GuidanceUse } from '@/lib/incident/guidance/context'
-import { explainAlternative, reflect } from '@/lib/incident/guidance/reflection'
+import { explainAlternative, reflect, type AlternativeExplanation, type DecisionResult } from '@/lib/incident/guidance/reflection'
 import { Eyebrow } from './shared'
 import { StoryChart } from './StoryChart'
 import { TopologyView } from './TopologyView'
@@ -185,43 +185,64 @@ export function Postmortem({ scenario, simulation, used = NO_HELP, onRunAgain, o
   )
 }
 
+const CHECK = {
+  good: { icon: CheckCircle2, className: 'text-healthy', text: 'text-fg', label: 'Good judgment' },
+  concern: { icon: AlertTriangle, className: 'text-warning', text: 'text-fg', label: 'Worth rethinking' },
+  missed: { icon: Circle, className: 'text-fg-subtle', text: 'text-fg-muted', label: 'Not this time' },
+} as const
+
 function Reasoning({ reflection }: { reflection: ReturnType<typeof reflect> }) {
-  const help = reflection.guidance.filter((entry) => entry.count > 0)
+  const questions = [
+    { title: 'What went well', text: reflection.well },
+    { title: 'What could improve', text: reflection.improve },
+    { title: 'What actually happened', text: reflection.happened },
+  ].filter((entry): entry is { title: string; text: string } => entry.text !== null)
   return (
-    <Section title="Your reasoning" note="What you did that good incident reasoning looks like. Not part of the score.">
-      <p className="text-[15px] font-medium text-fg" data-testid="recovered">
-        {reflection.recovered}
+    <Section title="Decision quality" note="How good your engineering judgment was, not just whether it worked. Not part of the score.">
+      <p className={cn('text-[15px] font-medium', reflection.recovered ? 'text-fg' : 'text-failed')} data-testid="recovered">
+        {reflection.headline}
       </p>
-      <div className="mt-3 grid gap-4 md:grid-cols-2">
+      <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <ul className="space-y-1.5" aria-label="Reasoning checks">
-          {reflection.checks.map((check) => (
-            <li key={check.id} className="flex gap-2 text-[13px]">
-              {check.done ? <CheckCircle2 className="mt-0.5 size-3.5 shrink-0 text-healthy" aria-label="Done" /> : <Circle className="mt-0.5 size-3.5 shrink-0 text-fg-subtle" aria-label="Not this time" />}
-              <span className={check.done ? 'text-fg' : 'text-fg-muted'}>{check.label}</span>
-            </li>
-          ))}
+          {reflection.checks.map((check) => {
+            const style = CHECK[check.status]
+            const Icon = style.icon
+            return (
+              <li key={check.id} className="flex gap-2 text-[13px]" data-status={check.status}>
+                <Icon className={cn('mt-0.5 size-3.5 shrink-0', style.className)} aria-label={style.label} />
+                <span className={style.text}>{check.label}</span>
+              </li>
+            )
+          })}
         </ul>
         <div>
           <Eyebrow>Guidance used</Eyebrow>
-          {help.length === 0 ? (
-            <p className="mt-1 text-[13px] text-fg-muted">None. You worked it out on your own.</p>
-          ) : (
-            <ul className="mt-1 space-y-0.5 text-[13px] text-fg" aria-label="Guidance used">
-              {help.map((entry) => (
-                <li key={entry.label}>
-                  {entry.label}: <span className="font-mono">{entry.count}</span>
-                </li>
-              ))}
-            </ul>
+          <p className="mt-1 text-[13px] text-fg" data-testid="guidance-used">
+            {reflection.guidance.total === 0 ? 'None. You worked it out on your own.' : `${reflection.guidance.total} ${reflection.guidance.total === 1 ? 'time' : 'times'}`}
+          </p>
+          {reflection.guidance.items.length > 0 && (
+            <p className="text-[12px] text-fg-muted">{reflection.guidance.items.map((item) => `${item.label}: ${item.count}`).join(' · ')}</p>
           )}
-          <p className="mt-1 text-[11.5px] text-fg-subtle">Asking for help is part of incident response. It doesn’t change your score.</p>
+          {reflection.guidance.explanations > 0 && <p className="text-[12px] text-fg-muted">Explanations opened: {reflection.guidance.explanations}</p>}
+          <p className="mt-1 text-[11.5px] text-fg-subtle">Guidance does not affect your score.</p>
         </div>
       </div>
+      {questions.length > 0 && (
+        <dl className="mt-3 grid gap-3 sm:grid-cols-3" aria-label="Review">
+          {questions.map((entry) => (
+            <div key={entry.title}>
+              <dt className="text-[11px] font-semibold tracking-wide text-fg-subtle uppercase">{entry.title}</dt>
+              <dd className="mt-0.5 text-[13px] leading-snug text-fg">{entry.text}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
       <div className="mt-3 flex gap-2 rounded-md border-l-2 border-accent bg-accent-soft px-3 py-2 text-[13.5px] leading-relaxed text-fg" data-testid="learning">
         <Brain className="mt-1 size-3.5 shrink-0 text-accent" aria-hidden="true" />
         <p>
-          <span className="font-semibold">Learning: </span>
-          {reflection.learning}
+          <span className="font-semibold">What you can learn: </span>
+          {reflection.learn}
+          {reflection.tryAgain && <span className="mt-1 block font-medium">Try again with this new information.</span>}
         </p>
       </div>
     </Section>
@@ -359,7 +380,7 @@ function CounterfactualPanel({ scenario, simulation, mine }: { scenario: Scenari
   const [index, setIndex] = useState(0)
   const [replacement, setReplacement] = useState(NOTHING)
   const [result, setResult] = useState<RunSummary | null>(null)
-  const [why, setWhy] = useState<string[]>([])
+  const [why, setWhy] = useState<AlternativeExplanation | null>(null)
   if (decisions.length === 0) return null
   const chosen = decisions[index]
   const compare = () => {
@@ -367,8 +388,21 @@ function CounterfactualPanel({ scenario, simulation, mine }: { scenario: Scenari
     const definition = scenario.decisions.find((decision) => decision.id === replacement)
     const title = replacement === NOTHING ? 'nothing' : (definition?.title ?? replacement)
     setResult({ ...summarize(`Instead: ${title}`, alternative) })
-    const guide = definition ? decisionGuide({ id: definition.id, kind: definition.reveals?.length ? 'investigate' : 'change', description: definition.description }, scenario.id) : null
-    setWhy(explainAlternative(simulation, alternative, chosen?.timestamp ?? 0, definition && guide ? { title: definition.title, guide } : null))
+    const guideOf = (id: string) => {
+      const found = scenario.decisions.find((decision) => decision.id === id)
+      return found ? decisionGuide({ id: found.id, kind: found.reveals?.length ? 'investigate' : 'change', description: found.description }, scenario.id) : null
+    }
+    const database = scenario.initialState.components.find((component) => component.type === 'database')?.label
+    setWhy(
+      explainAlternative(
+        simulation,
+        alternative,
+        chosen?.timestamp ?? 0,
+        { title: chosen?.title ?? '', guide: chosen ? guideOf(chosen.decisionId) : null },
+        definition ? { title: definition.title, guide: guideOf(definition.id)! } : null,
+        database,
+      ),
+    )
   }
   return (
     <Section title="Compare with another decision" note="The engine replays your run with one decision swapped. Everything else stays the same, at the same times.">
@@ -415,15 +449,42 @@ function CounterfactualPanel({ scenario, simulation, mine }: { scenario: Scenari
       {result && (
         <div className="mt-4" data-testid="counterfactual">
           <CompareTable runs={[mine, result]} />
-          {why.length > 0 && (
-            <ul className="mt-3 space-y-1 text-[13px] leading-snug text-fg" data-testid="counterfactual-why">
-              {why.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
+          {why && (
+            <div className="mt-4" data-testid="counterfactual-why">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <RunResult heading="Your decision" result={why.mine} />
+                <RunResult heading="Alternative" result={why.alternative} />
+              </div>
+              {why.overall && <p className="mt-3 text-[13px] leading-snug text-fg">{why.overall}</p>}
+            </div>
           )}
         </div>
       )}
     </Section>
+  )
+}
+
+function RunResult({ heading, result }: { heading: string; result: DecisionResult }) {
+  return (
+    <div className="rounded-md border border-border bg-surface-2 p-3 text-[13px]">
+      <Eyebrow>{heading}</Eyebrow>
+      <p className="mt-0.5 font-medium text-fg">{result.title}</p>
+      {result.goal && (
+        <p className="mt-1 text-fg-muted">
+          <span className="text-fg">Goal: </span>
+          {result.goal}
+        </p>
+      )}
+      {result.result.length > 0 && (
+        <div className="mt-1">
+          <span className="text-fg">Result: </span>
+          <ul className="mt-0.5 space-y-0.5 text-fg-muted">
+            {result.result.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
   )
 }

@@ -31,10 +31,10 @@ export function IncidentHeader({ title, view }: { title: string; view: IncidentV
         <span className={cn('rounded border px-2 py-1 font-mono text-[11px] font-semibold tracking-wide', status.className)} data-testid="incident-status">
           {status.label}
         </span>
-        <div className="flex items-center gap-2 text-sm" data-testid="budget">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm" data-testid="budget">
           <Wallet className="size-4 text-fg-subtle" aria-hidden="true" />
           <span className="text-fg-muted">Budget</span>
-          <span className={cn('font-mono tabular-nums', budget.over ? 'text-failed' : 'text-fg')}>
+          <span className={cn('font-mono whitespace-nowrap tabular-nums', budget.over ? 'text-failed' : 'text-fg')}>
             {usd(budget.monthlyCost)} / {budget.limit === null ? '—' : usd(budget.limit)}
           </span>
           {budget.headroom !== null && (

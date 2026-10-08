@@ -7,7 +7,7 @@ import {
   type Transition,
 } from '@/lib/incident/session'
 import { EMPTY_HISTORY, guidanceContext, outcomeOf, type GuidanceHistory } from '@/lib/incident/guidance/context'
-import { situationOf, type SituationId } from '@/lib/incident/guidance/situation'
+import { situationKey } from '@/lib/incident/guidance/situation'
 import { nextLevel } from '@/lib/incident/guidance/struggle'
 import type { Mode } from '@/lib/incident/guidance/modes'
 
@@ -29,7 +29,10 @@ export interface StatedHypothesis {
 /** Which rung of the guidance ladder is showing, and for which situation. */
 export interface HintState {
   level: 2 | 3 | 4
-  situation: SituationId
+  /** The situation it was given for (see `situationKey`). A new one starts the ladder again. */
+  key: string
+  /** Guided reasoning was already shown here and help was asked for again: offer next steps, not a repeat. */
+  exhausted: boolean
 }
 
 export type Phase = 'briefing' | 'paged' | 'running' | 'postmortem'
@@ -82,6 +85,8 @@ interface IncidentStore {
   /** Climb one rung of the ladder (or start at the hint when the situation changed). */
   askHint: (stuck?: boolean) => void
   closeHint: () => void
+  /** Show the guided reasoning already given for this situation again. */
+  revisitHint: () => void
   dismissPrompt: () => void
   noteReasoningFlow: () => void
   noteExplanation: (id: string) => void
@@ -181,14 +186,24 @@ export const useIncidentStore = create<IncidentStore>((set, get) => {
     askHint: (stuck = false) => {
       const { view, guidance, hint } = get()
       const history = stuck ? { ...guidance, stuck: guidance.stuck + 1 } : guidance
-      const situation = situationOf(guidanceContext(view, history))
+      const key = situationKey(guidanceContext(view, history))
+      const same = hint !== null && hint.key === key
+      // The ladder is finite: after guided reasoning, asking again offers next steps instead of repeating it.
+      if (same && hint.level === 4) {
+        set({ hint: { ...hint, exhausted: true }, hintOpen: true, guidance: history, promptDismissedAt: history.outcomes.length })
+        return
+      }
       // A new situation starts again from the gentlest rung.
-      const level = hint && hint.situation === situation ? nextLevel(hint.level) : 2
+      const level = same ? nextLevel(hint.level) : 2
       const used = { ...history.used }
       if (level === 2) used.hints += 1
       else if (level === 3) used.strongHints += 1
       else used.rescues += 1
-      set({ hint: { level, situation }, hintOpen: true, guidance: { ...history, used }, promptDismissedAt: history.outcomes.length })
+      set({ hint: { level, key, exhausted: false }, hintOpen: true, guidance: { ...history, used }, promptDismissedAt: history.outcomes.length })
+    },
+    revisitHint: () => {
+      const { hint } = get()
+      if (hint) set({ hint: { ...hint, exhausted: false }, hintOpen: true })
     },
     closeHint: () => set({ hintOpen: false }),
     dismissPrompt: () => set({ promptDismissedAt: get().guidance.outcomes.length }),

@@ -46,3 +46,17 @@ export function situationOf({ view, causes }: GuidanceContext): SituationId {
   if (collapsing) return 'beyond-capacity'
   return 'unclear'
 }
+
+/**
+ * What counts as "a new situation" for the hint ladder: the situation itself,
+ * plus the changes that make old advice stale even when the label stays the
+ * same: the database becoming measured, a constraint changing, or traffic
+ * roughly doubling or halving.
+ */
+export function situationKey(context: GuidanceContext): string {
+  const { view } = context
+  const traffic = view.metrics.traffic.value
+  const start = view.metrics.traffic.series[0]
+  const band = traffic && start ? Math.round(Math.log2(traffic / start)) : 0
+  return [situationOf(context), view.metrics.dbCpu.value === null ? 'unmeasured' : 'measured', view.budget.limit ?? '-', view.complexity.limit ?? '-', band].join('|')
+}

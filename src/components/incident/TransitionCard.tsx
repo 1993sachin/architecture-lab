@@ -87,7 +87,7 @@ export function TransitionCard({ transition, hypothesis, why = true, objective, 
         )}
       </div>
       <p className="mt-1 text-sm font-semibold text-fg">{headline}</p>
-      {explained.goal && (
+      {why && explained.goal && (
         <p className="mt-0.5 flex gap-1.5 text-[13px] text-fg-muted" data-testid="trying-to">
           <Target className="mt-0.5 size-3.5 shrink-0 text-accent" aria-hidden="true" />
           <span>
@@ -113,7 +113,7 @@ export function TransitionCard({ transition, hypothesis, why = true, objective, 
             {transition.revealed.map((value) => (
               <li key={value.id} className="text-[13px]">
                 <span className="font-medium text-fg">{value.text}</span>
-                <span className="block text-xs text-fg-muted">{interpretFact(value, transition.after) ?? value.description}</span>
+                {why && <span className="block text-xs text-fg-muted">{interpretFact(value, transition.after) ?? value.description}</span>}
               </li>
             ))}
           </ul>

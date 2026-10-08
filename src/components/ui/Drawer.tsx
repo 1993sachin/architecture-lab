@@ -36,7 +36,7 @@ export function Drawer({ open, title, onClose, children }: DrawerProps) {
             onClick={onClose}
           />
           <m.div
-            className="absolute inset-x-0 bottom-0 flex max-h-[80vh] flex-col rounded-t-xl border-t border-border bg-surface shadow-2xl"
+            className="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col supports-[height:100dvh]:max-h-[85dvh] rounded-t-xl border-t border-border bg-surface shadow-2xl"
             initial={{ y: '100%' }}
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
@@ -50,7 +50,7 @@ export function Drawer({ open, title, onClose, children }: DrawerProps) {
                 <X className="size-4" aria-hidden="true" />
               </IconButton>
             </div>
-            <div className="overflow-y-auto p-4">{children}</div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
           </m.div>
         </div>
       )}
