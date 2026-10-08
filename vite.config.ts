@@ -24,7 +24,9 @@ export default defineConfig({
     },
   },
   test: {
+    // Logic tests run in node; component tests opt into jsdom with a file comment.
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.{ts,tsx}'],
+    setupFiles: ['src/test/setup.ts'],
   },
 })

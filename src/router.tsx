@@ -9,6 +9,7 @@ const Experiments = lazy(() => import('@/pages/Experiments'))
 const MicrofrontendPlayground = lazy(() => import('@/pages/MicrofrontendPlayground'))
 const ResiliencePlayground = lazy(() => import('@/pages/ResiliencePlayground'))
 const ArchitectureSimulator = lazy(() => import('@/pages/ArchitectureSimulator'))
+const IncidentRunner = lazy(() => import('@/pages/IncidentRunner'))
 const Notebook = lazy(() => import('@/pages/Notebook'))
 const Article = lazy(() => import('@/pages/Article'))
 const ADRs = lazy(() => import('@/pages/ADRs'))
@@ -30,6 +31,7 @@ export const router = createHashRouter([
       { path: 'experiments/microfrontend', element: <MicrofrontendPlayground /> },
       { path: 'experiments/resilience', element: <ResiliencePlayground /> },
       { path: 'simulator', element: <ArchitectureSimulator /> },
+      { path: 'incident', element: <IncidentRunner /> },
       { path: 'notebook', element: <Notebook /> },
       { path: 'notebook/:slug', element: <Article /> },
       { path: 'adrs', element: <ADRs /> },
