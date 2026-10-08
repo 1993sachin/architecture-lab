@@ -30,6 +30,7 @@ src/
     layout/      App shell, top navigation, footer
     ui/          Design-system primitives (Button, Card, Badge, Switch, Slider, ...)
     home/        Landing page sections
+    incident/    Incident Runner screens and postmortem
   data/          Experiment registry and (later) challenges, articles, ADRs
   hooks/         Shared React hooks
   lib/           Framework-free helpers
@@ -38,6 +39,27 @@ src/
   types/         Shared types
   router.tsx     Route table
 ```
+
+## Incident Runner
+
+`/#/incident` plays the **10× Traffic Incident** as a sequence of decisions: briefing, page, observe, decide, watch the system move, repeat, then a postmortem. Every number on the screen comes from [`@architecture-lab/engine`](https://github.com/1993sachin/architecture-lab-engine), which is installed from GitHub pinned to a commit (its `prepare` script builds it on install).
+
+```
+React components (src/components/incident, src/pages/IncidentRunner.tsx)
+  ↓ render view models, dispatch moves
+Zustand store (src/store/incidentStore.ts)
+  ↓
+Incident Runner adapter (src/lib/incident/session.ts, review.ts)
+  ↓ drives the simulation, builds view models, never reveals hidden observations
+Architecture Lab Engine → scenario
+```
+
+- **Pacing.** A change to the system takes one simulated minute (`DECISION_MINUTES`); an investigation takes the time the scenario gives it. Waiting stops early when an event fires or a constraint changes. All of it is recorded as engine actions.
+- **Hidden information.** A tile, diagram load or fact appears only once the engine reports it observable; until then the UI says which investigation would reveal it.
+- **Postmortem.** Rendered from the engine's structured postmortem. Trade-offs come from replaying the scenario's reference playbooks; "Compare with another decision" replays your run with one decision swapped. No model writes or judges anything.
+- **Replay.** "Replay decisions" pushes your moves through a fresh simulation, one by one, and checks the result is identical.
+
+To work on the engine and the app together, `npm link` the engine checkout, or point the dependency at a newer commit.
 
 ## Routing and deployment
 
