@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button'
 import type { GuidanceContext } from '@/lib/incident/guidance/context'
 import { evidence, missing, MISSING, symptoms, type MissingId, type SymptomId } from '@/lib/incident/guidance/flow'
 import { guidance, type Guidance, type HintAction } from '@/lib/incident/guidance/hints'
-import { situationOf } from '@/lib/incident/guidance/situation'
+import { situationKey } from '@/lib/incident/guidance/situation'
 import type { Struggle } from '@/lib/incident/guidance/struggle'
 import type { HintState } from '@/store/incidentStore'
 import { Eyebrow } from './shared'
@@ -17,6 +17,9 @@ interface GuidancePanelProps {
   struggle: Struggle | null
   onHint: (stuck?: boolean) => void
   onCloseHint: () => void
+  onRevisit: () => void
+  /** Takes the operator to the actions, to decide for themselves. */
+  onDecide: () => void
   onDismissPrompt: () => void
   onReasoningFlow: () => void
   /** Opens the usual decision preview. Guidance never decides on its own. */
@@ -30,10 +33,9 @@ const NEXT_RUNG = { 2: 'Stronger hint', 3: 'Walk me through it' } as const
  * short "help me reason" walk. Nothing here acts; every option opens the same
  * preview as clicking the action yourself.
  */
-export function GuidancePanel({ context, hint, struggle, onHint, onCloseHint, onDismissPrompt, onReasoningFlow, onSelect }: GuidancePanelProps) {
+export function GuidancePanel({ context, hint, struggle, onHint, onCloseHint, onRevisit, onDecide, onDismissPrompt, onReasoningFlow, onSelect }: GuidancePanelProps) {
   const [flow, setFlow] = useState(false)
-  const current = situationOf(context)
-  const stale = hint !== null && hint.situation !== current
+  const stale = hint !== null && hint.key !== situationKey(context)
   const shown = hint && !stale ? guidance(context, hint.level) : null
 
   return (
@@ -47,13 +49,24 @@ export function GuidancePanel({ context, hint, struggle, onHint, onCloseHint, on
               Give me a hint
             </button>
           </span>
-          <button type="button" aria-label="Not now" onClick={onDismissPrompt} className="text-fg-subtle hover:text-fg">
+          <button type="button" aria-label="Not now" onClick={onDismissPrompt} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
             <X className="size-3.5" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      {shown ? (
+      {shown && hint?.exhausted ? (
+        <NextSteps
+          investigation={shown.actions.find((action) => action.kind === 'investigate') ?? openInvestigation(context)}
+          onInvestigate={onSelect}
+          onDecide={() => {
+            onCloseHint()
+            onDecide()
+          }}
+          onRevisit={onRevisit}
+          onClose={onCloseHint}
+        />
+      ) : shown ? (
         <HintCard hint={shown} onNext={() => onHint()} onClose={onCloseHint} onSelect={onSelect} />
       ) : stale ? (
         <div className="rounded-md border border-border bg-surface-2 px-2.5 py-2 text-[13px] text-fg-muted">
@@ -84,12 +97,46 @@ export function GuidancePanel({ context, hint, struggle, onHint, onCloseHint, on
           <Button size="sm" variant="ghost" onClick={() => onHint()}>
             Give me a hint
           </Button>
-          <button type="button" onClick={() => onHint(true)} className="text-[12px] text-fg-subtle hover:text-fg">
+          <button type="button" onClick={() => onHint(true)} className="min-h-9 px-1 text-[12px] text-fg-subtle hover:text-fg sm:min-h-0">
             I’m stuck
           </button>
         </div>
       )}
     </div>
+  )
+}
+
+function openInvestigation({ view }: GuidanceContext): HintAction | null {
+  const action = view.actions.find((candidate) => candidate.kind === 'investigate' && candidate.enabled && candidate.timesTaken === 0)
+  return action ? { actionId: action.id, title: action.title, kind: action.kind } : null
+}
+
+/** After guided reasoning: no new rung, just the ways forward. */
+function NextSteps({ investigation, onInvestigate, onDecide, onRevisit, onClose }: { investigation: HintAction | null; onInvestigate: (actionId: string) => void; onDecide: () => void; onRevisit: () => void; onClose: () => void }) {
+  return (
+    <section aria-label="What next" className="rounded-md border border-warning/40 bg-warning/5 p-2.5" data-testid="hint-exhausted">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[13px] leading-snug text-fg">You’ve seen the available evidence for this situation. What would you like to do?</p>
+        <button type="button" aria-label="Close hint" onClick={onClose} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
+          <X className="size-3.5" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {investigation && (
+          <Button size="sm" onClick={() => onInvestigate(investigation.actionId)}>
+            <Search className="size-3.5 text-info" aria-hidden="true" />
+            {investigation.title}
+          </Button>
+        )}
+        <Button size="sm" onClick={onDecide}>
+          Make a decision
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onRevisit}>
+          Revisit the evidence
+        </Button>
+      </div>
+      <p className="mt-1.5 text-[11.5px] text-fg-subtle">New hints start again once the situation changes.</p>
+    </section>
   )
 }
 
@@ -107,7 +154,7 @@ function HintCard({ hint, onNext, onClose, onSelect }: { hint: Guidance; onNext:
             ))}
           </span>
         </Eyebrow>
-        <button type="button" aria-label="Close hint" onClick={onClose} className="text-fg-subtle hover:text-fg">
+        <button type="button" aria-label="Close hint" onClick={onClose} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
           <X className="size-3.5" aria-hidden="true" />
         </button>
       </div>
@@ -174,7 +221,7 @@ function ReasoningFlow({ context, onClose, onHint, onSelect }: { context: Guidan
     <section aria-label="Help me reason" className="space-y-3 rounded-md border border-accent/40 bg-accent-soft/60 p-2.5" data-testid="reasoning-flow">
       <div className="flex items-center justify-between">
         <Eyebrow className="text-accent">Let’s reason through this together</Eyebrow>
-        <button type="button" aria-label="Close" onClick={onClose} className="text-fg-subtle hover:text-fg">
+        <button type="button" aria-label="Close" onClick={onClose} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
           <X className="size-3.5" aria-hidden="true" />
         </button>
       </div>
@@ -252,7 +299,7 @@ function Chips({ options, value, onChange, label }: { options: { id: string; lab
             role="radio"
             aria-checked={checked}
             onClick={() => onChange(option.id)}
-            className={cn('flex items-center gap-1 rounded-full border px-2.5 py-1 text-[12px] transition-colors', checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent')}
+            className={cn('flex items-center gap-1 min-h-9 rounded-full border px-3 py-1 text-[12.5px] sm:min-h-0 sm:px-2.5 sm:text-[12px] transition-colors', checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent')}
           >
             {option.mark && <span className={cn('size-1.5 rounded-full', checked ? 'bg-white' : 'bg-failed')} aria-label="breaching" />}
             {option.label}

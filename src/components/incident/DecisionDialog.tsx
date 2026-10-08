@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AlertTriangle, Clock, Layers, Lightbulb, Search, Wallet } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { Button } from '@/components/ui/Button'
@@ -53,13 +53,26 @@ export function DecisionDialog({ action, view, causes, hypothesis, mode = MODES.
   const explained = explainDecision(action, view, causes)
   const unknowns = [...new Set(view.unknown.filter((fact) => fact.revealedBy.includes(action.title)).map((fact) => unknownNote(fact.id, view)).filter((note): note is string => note !== null))]
   const cost = view.budget.monthlyCost + action.monthlyCost
+  const field = useRef<HTMLTextAreaElement>(null)
   const submit = () => {
     setTried(true)
-    if (!missing) onConfirm(rationale)
+    // The field may be scrolled out of view on a short screen: bring it back so the error is seen.
+    if (missing) field.current?.focus()
+    else onConfirm(rationale)
   }
   return (
     <Modal
       onClose={onCancel}
+      footer={
+        <div className="flex justify-end gap-2 px-5 py-3">
+          <Button variant="ghost" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={submit} className={missing ? 'opacity-60' : undefined}>
+            {investigate ? 'Investigate' : 'Commit decision'}
+          </Button>
+        </div>
+      }
       title={
         <div className="border-b border-border px-5 pt-4 pb-3">
           <Eyebrow>You are about to · {clock(view.time)}</Eyebrow>
@@ -207,7 +220,7 @@ export function DecisionDialog({ action, view, causes, hypothesis, mode = MODES.
                     role="radio"
                     aria-checked={checked}
                     onClick={() => onObjective(checked ? null : option.id)}
-                    className={cn('rounded-full border px-2.5 py-1 text-[12px] transition-colors', checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent')}
+                    className={cn('min-h-9 rounded-full border px-3 py-1 text-[12.5px] sm:min-h-0 sm:px-2.5 sm:text-[12px] transition-colors', checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent')}
                   >
                     {option.label}
                   </button>
@@ -223,6 +236,7 @@ export function DecisionDialog({ action, view, causes, hypothesis, mode = MODES.
           <p className="text-xs text-fg-subtle">Required. It is recorded with the decision and shown in the postmortem.</p>
           <textarea
             id="rationale"
+            ref={field}
             value={rationale}
             onChange={(event) => setRationale(event.target.value)}
             // A prefilled sentence is meant to be finished, so typing starts at its end.
@@ -239,14 +253,6 @@ export function DecisionDialog({ action, view, causes, hypothesis, mode = MODES.
             </p>
           )}
         </div>
-      </div>
-      <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
-        <Button variant="ghost" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button variant="primary" onClick={submit} className={missing ? 'opacity-60' : undefined}>
-          {investigate ? 'Investigate' : 'Commit decision'}
-        </Button>
       </div>
     </Modal>
   )

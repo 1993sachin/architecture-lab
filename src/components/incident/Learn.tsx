@@ -211,6 +211,11 @@ export function MetricBody({ metricKey, view, causes, onCheck }: { metricKey: Me
   )
 }
 
+/** Without explanations, a label shouldn't look clickable: drop the link styling, keep the layout. */
+function plain(className?: string): string | undefined {
+  return className?.split(' ').filter((name) => !/^(underline|decoration-|underline-offset-|hover:|cursor-)/.test(name)).join(' ')
+}
+
 /** Wraps a metric (or just an info icon) so clicking it explains the metric. */
 export function LearnMetric({
   metricKey,
@@ -231,7 +236,7 @@ export function LearnMetric({
   const metric = view.metrics[metricKey]
   const concept = explainMetric(metricKey, view, causes).concept
   // Explanations off: the content stays, without the trigger (and without its info icon).
-  if (!learning.enabled) return children ? <span className={className} data-learn="off">{children}</span> : null
+  if (!learning.enabled) return children ? <span className={plain(className)} data-learn="off">{children}</span> : null
   const title = metricKey === 'dbCpu' || metricKey === 'appCpu' ? `${metric.label}: ${concept.title.toLowerCase()}` : concept.title
   return (
     <Explainable

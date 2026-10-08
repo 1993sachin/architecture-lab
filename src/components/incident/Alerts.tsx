@@ -10,6 +10,13 @@ export function PageAlert({ view, transition, onAcknowledge }: { view: IncidentV
     <Modal
       tone="alert"
       label="You have been paged"
+      footer={
+        <div className="flex justify-end px-5 py-3">
+          <Button variant="danger" onClick={onAcknowledge}>
+            Acknowledge and take the incident
+          </Button>
+        </div>
+      }
       title={
         <div className="flex items-center gap-3 border-b border-failed/40 bg-failed/10 px-5 py-4">
           <BellRing className="size-6 shrink-0 animate-pulse text-failed" aria-hidden="true" />
@@ -50,11 +57,6 @@ export function PageAlert({ view, transition, onAcknowledge }: { view: IncidentV
           The dashboards do not tell you everything. You can investigate first or act now. The clock only moves when you do something, but every move takes time.
         </p>
       </div>
-      <div className="flex justify-end border-t border-border px-5 py-3">
-        <Button variant="danger" onClick={onAcknowledge}>
-          Acknowledge and take the incident
-        </Button>
-      </div>
     </Modal>
   )
 }
@@ -72,6 +74,13 @@ export function ConstraintAlert({ change, view, onDismiss }: { change: Constrain
       tone="warning"
       onClose={onDismiss}
       label={`New constraint: ${name}`}
+      footer={
+        <div className="flex justify-end px-5 py-3">
+          <Button variant="primary" onClick={onDismiss}>
+            Understood
+          </Button>
+        </div>
+      }
       title={
         <div className="flex items-center gap-3 border-b border-warning/40 bg-warning/10 px-5 py-4">
           <AlertTriangle className="size-6 shrink-0 text-warning" aria-hidden="true" />
@@ -108,11 +117,6 @@ export function ConstraintAlert({ change, view, onDismiss }: { change: Constrain
         </dl>
         <p className="text-xs text-fg-subtle">{change.description}</p>
         {view.actions.length > 0 && headroom !== null && headroom < 0 && <p className="text-fg">You are over the new limit. Every minute you stay over is recorded and shows up in the postmortem.</p>}
-      </div>
-      <div className="flex justify-end border-t border-border px-5 py-3">
-        <Button variant="primary" onClick={onDismiss}>
-          Understood
-        </Button>
       </div>
     </Modal>
   )

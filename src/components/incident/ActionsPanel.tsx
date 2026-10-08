@@ -21,6 +21,8 @@ interface ActionsPanelProps {
   explain: boolean
   /** What each action is for. Off in Expert mode: just the actions and their costs. */
   guides?: boolean
+  /** Show what each action is for without being asked. Off in Challenge: it stays behind each action's toggle. */
+  proactive?: boolean
   /** Help on request, shown under the decision cue. */
   guidance?: ReactNode
   onSelect: (id: string) => void
@@ -29,7 +31,7 @@ interface ActionsPanelProps {
 }
 
 /** The decision cue, then the actions grouped by what they try to accomplish. */
-export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis, explain, guides = true, guidance, onSelect, onWait, onFinish }: ActionsPanelProps) {
+export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis, explain, guides = true, proactive = true, guidance, onSelect, onWait, onFinish }: ActionsPanelProps) {
   return (
     <section aria-labelledby="available-actions" className="rounded-lg border border-border bg-surface">
       {move && (
@@ -53,7 +55,7 @@ export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis,
                       aria-checked={checked}
                       onClick={() => onHypothesis(checked ? null : option)}
                       className={cn(
-                        'rounded-full border px-2.5 py-1 text-[12px] transition-colors',
+                        'min-h-9 rounded-full border px-3 py-1 text-[12.5px] sm:min-h-0 sm:px-2.5 sm:text-[12px] transition-colors',
                         checked ? 'border-accent bg-accent text-white' : 'border-border-strong bg-surface text-fg hover:border-accent',
                       )}
                     >
@@ -79,7 +81,7 @@ export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis,
             </p>
             <div className="space-y-1.5">
               {actions.map((action) => (
-                <ActionButton key={action.id} action={action} guide={decisionGuide(action, view.scenarioId)} explain={explain} guides={guides} onSelect={onSelect} />
+                <ActionButton key={action.id} action={action} guide={decisionGuide(action, view.scenarioId)} explain={explain && proactive} guides={guides} proactive={proactive} onSelect={onSelect} />
               ))}
             </div>
           </div>
@@ -107,7 +109,7 @@ export function ActionsPanel({ view, move, hypotheses, hypothesis, onHypothesis,
   )
 }
 
-function ActionButton({ action, guide, explain, guides, onSelect }: { action: ActionView; guide: DecisionGuide; explain: boolean; guides: boolean; onSelect: (id: string) => void }) {
+function ActionButton({ action, guide, explain, guides, proactive, onSelect }: { action: ActionView; guide: DecisionGuide; explain: boolean; guides: boolean; proactive: boolean; onSelect: (id: string) => void }) {
   const [open, setOpen] = useState(false)
   const details = guides && ((guide.helpsWhen?.length ?? 0) > 0 || (guide.mayNotHelpWhen?.length ?? 0) > 0 || (guide.tradeoffs?.length ?? 0) > 0 || (guide.improves?.length ?? 0) > 0)
   return (
@@ -126,7 +128,7 @@ function ActionButton({ action, guide, explain, guides, onSelect }: { action: Ac
             {action.complexity !== 0 && <> · {action.complexity > 0 ? '+' : ''}{action.complexity} cx</>}
           </span>
         </span>
-        {guides && (explain || action.kind === 'investigate') && <span className="mt-0.5 block text-[12px] leading-snug text-fg-muted">{guide.goal}</span>}
+        {guides && (explain || (proactive && action.kind === 'investigate')) && <span className="mt-0.5 block text-[12px] leading-snug text-fg-muted">{guide.goal}</span>}
         {!action.enabled && action.reason && <span className="mt-0.5 block text-xs text-warning">Unavailable: {action.reason}</span>}
         {action.timesTaken > 0 && action.enabled && <span className="mt-0.5 block text-[11px] text-fg-subtle">Done {action.timesTaken}× already</span>}
       </button>

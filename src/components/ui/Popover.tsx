@@ -121,7 +121,7 @@ export function Popover({ anchor, title, onClose, children }: PopoverProps) {
         <p id={titleId} className="text-sm font-semibold text-fg">
           {title}
         </p>
-        <button type="button" aria-label="Close" onClick={onClose} className="-mr-1 rounded p-0.5 text-fg-subtle hover:text-fg">
+        <button type="button" aria-label="Close" onClick={onClose} className="-m-2 grid size-9 shrink-0 place-items-center rounded-md text-fg-subtle hover:text-fg sm:-m-1.5 sm:size-7">
           <X className="size-4" aria-hidden="true" />
         </button>
       </div>

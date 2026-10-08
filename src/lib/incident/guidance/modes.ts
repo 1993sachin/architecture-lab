@@ -34,7 +34,7 @@ export const MODES: Record<Mode, ModeConfig> = {
   challenge: {
     id: 'challenge',
     label: 'Challenge',
-    summary: 'Minimal guidance. You get the evidence, the actions and their consequences, and no hints.',
+    summary: 'No hints or prompts. Explanations only when you ask, and every consequence explained.',
     hints: false,
     yourMove: false,
     interpretation: false,
@@ -44,7 +44,7 @@ export const MODES: Record<Mode, ModeConfig> = {
   expert: {
     id: 'expert',
     label: 'Expert',
-    summary: 'Maximum realism. Raw metrics and actions, no interpretation. You reason about everything yourself.',
+    summary: 'Raw metrics, actions, costs and consequences. No interpretation: you read the system yourself.',
     hints: false,
     yourMove: false,
     interpretation: false,
