@@ -12,13 +12,16 @@ import { Eyebrow } from './shared'
  */
 export function TransitionCard({ transition, onPostmortem }: { transition: Transition; onPostmortem?: () => void }) {
   const { decision } = transition
+  const minutes = transition.to - transition.from
   const headline = decision
     ? decision.kind === 'investigate'
       ? `You investigated: ${decision.title.replace(/^Investigate /, '')}.`
       : `You chose: ${decision.title}.`
-    : transition.to === transition.from
-      ? 'Nothing happened.'
-      : 'You held and watched.'
+    : transition.start
+      ? `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} into your shift, you got paged.`
+      : transition.to === transition.from
+        ? 'Nothing happened.'
+        : 'You held and watched.'
   return (
     <m.section
       key={`${transition.from}-${transition.to}-${decision?.id ?? 'wait'}`}

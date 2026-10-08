@@ -46,3 +46,13 @@ export const experiments: ExperimentMeta[] = [
     guideId: 'simulator-url-shortener',
   },
 ]
+
+/**
+ * The Playground's order: closest to the incident first. The registry order
+ * above stays as is because the guides' learning path follows it.
+ */
+const PLAYGROUND_ORDER = ['resilience', 'simulator', 'microfrontend']
+
+export const playground: ExperimentMeta[] = [...experiments].sort(
+  (a, b) => PLAYGROUND_ORDER.indexOf(a.id) - PLAYGROUND_ORDER.indexOf(b.id),
+)

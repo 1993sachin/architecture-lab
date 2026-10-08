@@ -1,7 +1,7 @@
 export const site = {
   name: 'Architecture Lab',
-  tagline: 'Build it. Break it. Measure it. Understand it.',
+  tagline: 'Practice engineering judgment under pressure.',
   description:
-    'An interactive playground for exploring software architecture, system design, performance, and resilience.',
+    'Incident practice for software engineers. Make decisions with incomplete information during a realistic incident, and watch a deterministic simulation play out the consequences.',
   repoUrl: 'https://github.com/1993sachin/architecture-lab',
 } as const

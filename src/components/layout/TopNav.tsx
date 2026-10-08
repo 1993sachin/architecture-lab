@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Menu, X } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import { Menu, Siren, X } from 'lucide-react'
 import { AnimatePresence, m } from 'framer-motion'
 import { site } from '@/lib/site'
 import { cn } from '@/lib/cn'
 import { GitHubIcon } from '@/components/ui/GitHubIcon'
-import { IconButton } from '@/components/ui/Button'
+import { ButtonLink, IconButton } from '@/components/ui/Button'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { LogoMark } from './Logo'
-import { primaryNav } from './navigation'
+import { isNavActive, primaryNav, startIncident } from './navigation'
 
 function navClass({ isActive }: { isActive: boolean }) {
   return cn(
@@ -20,6 +20,7 @@ function navClass({ isActive }: { isActive: boolean }) {
 export function TopNav() {
   const [open, setOpen] = useState(false)
   const location = useLocation()
+  const onIncident = isNavActive(primaryNav[0], location.pathname)
 
   // Close the mobile menu whenever the route changes.
   useEffect(() => {
@@ -43,14 +44,23 @@ export function TopNav() {
         <ul className="hidden items-center gap-0.5 md:flex">
           {primaryNav.map((item) => (
             <li key={item.to}>
-              <NavLink to={item.to} className={navClass}>
+              <Link to={item.to} className={navClass({ isActive: isNavActive(item, location.pathname) })} aria-current={isNavActive(item, location.pathname) ? 'page' : undefined}>
                 {item.label}
-              </NavLink>
+              </Link>
             </li>
           ))}
         </ul>
 
         <div className="ml-auto flex items-center gap-1">
+          {!onIncident && (
+            // The wrapper hides it on phones: the button's own inline-flex would win over `hidden`.
+            <span className="mr-2 hidden sm:block">
+              <ButtonLink to={startIncident.to} variant="primary" size="sm">
+                <Siren className="size-3.5" aria-hidden="true" />
+                {startIncident.label}
+              </ButtonLink>
+            </span>
+          )}
           <a
             href={site.repoUrl}
             target="_blank"
@@ -87,11 +97,23 @@ export function TopNav() {
             <ul className="container-page flex flex-col gap-0.5 py-2">
               {primaryNav.map((item) => (
                 <li key={item.to}>
-                  <NavLink to={item.to} className={({ isActive }) => cn(navClass({ isActive }), 'block py-2.5 text-sm')}>
+                  <Link
+                    to={item.to}
+                    className={cn(navClass({ isActive: isNavActive(item, location.pathname) }), 'block py-2.5 text-sm')}
+                    aria-current={isNavActive(item, location.pathname) ? 'page' : undefined}
+                  >
                     {item.label}
-                  </NavLink>
+                  </Link>
                 </li>
               ))}
+              {!onIncident && (
+                <li className="sm:hidden">
+                  <ButtonLink to={startIncident.to} variant="primary" size="md" className="mt-1 w-full">
+                    <Siren className="size-4" aria-hidden="true" />
+                    {startIncident.label}
+                  </ButtonLink>
+                </li>
+              )}
             </ul>
           </m.div>
         )}
